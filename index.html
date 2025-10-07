@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>3D ASCII — Right-Hand Rule (GitHub Pages friendly)</title>
+  <style>
+    :root{--bg:#0b1220;--panel:#0f1724;--accent:#7dd3fc}
+    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    body{background:linear-gradient(180deg,var(--bg),#071226);color:#dbeafe;display:flex;align-items:center;justify-content:center}
+    .wrap{width:100%;max-width:1100px;padding:18px;box-sizing:border-box}
+
+    header{display:flex;align-items:center;gap:18px;margin-bottom:12px}
+    h1{font-size:20px;margin:0}
+    p.lead{margin:0;color:#93c5fd90;font-size:13px}
+
+    .stage{height:560px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:12px;padding:14px;box-sizing:border-box;display:flex;gap:12px}
+    .viewport{flex:1;background:rgba(255,255,255,0.02);border-radius:10px;overflow:hidden;position:relative;perspective:900px}
+
+    /* 3D scene container */
+    .scene{position:absolute;inset:0;transform-style:preserve-3d;display:block;transition:transform 60ms linear}
+
+    /* characters placed in 3D */
+    .char{position:absolute;left:50%;top:50%;transform-style:preserve-3d;white-space:pre;user-select:none;font-family:monospace;font-weight:600}
+
+    /* UI panel */
+    aside.panel{width:320px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:10px;padding:12px;box-sizing:border-box;color:#cfe8ff}
+    aside h2{margin:6px 0;font-size:16px}
+    label{font-size:13px;display:block;margin-top:8px}
+    input[type=range]{width:100%}
+    .kbd{display:inline-block;background:#061226;padding:6px 8px;border-radius:6px;font-family:monospace;font-size:12px}
+    .buttons{display:flex;gap:8px;margin-top:10px}
+    button{background:transparent;border:1px solid rgba(125,211,252,0.12);color:var(--accent);padding:8px;border-radius:8px;cursor:pointer}
+    footer.note{font-size:12px;color:#93c5fd70;margin-top:10px}
+
+    /* small legend */
+    .legend{position:absolute;left:12px;bottom:12px;background:rgba(3,7,18,0.55);padding:8px;border-radius:8px;font-size:12px}
+
+    /* responsive */
+    @media (max-width:900px){.stage{flex-direction:column;height:700px}.panel{width:auto}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>3D ASCII axes — Right-hand rule learning tool</h1>
+        <p class="lead">Uses only characters: <span class="kbd">\</span> <span class="kbd">|</span> <span class="kbd">/</span> <span class="kbd">-</span>. Drag to rotate, wheel to zoom. Host as <code>index.html</code> on GitHub Pages.</p>
+      </div>
+    </header>
+
+    <div class="stage">
+      <div class="viewport" id="viewport">
+        <div class="scene" id="scene"></div>
+        <div class="legend" id="legend">Drag: rotate • Wheel: zoom • Click 'Reset' to home</div>
+      </div>
+
+      <aside class="panel">
+        <h2>Vectors (set components)</h2>
+        <label>A (Ax,Ay,Az): <span id="Avals">1,0,0</span></label>
+        <input id="Ax" type="range" min="-5" max="5" value="1" step="1">
+        <input id="Ay" type="range" min="-5" max="5" value="0" step="1">
+        <input id="Az" type="range" min="-5" max="5" value="0" step="1">
+
+        <label>B (Bx,By,Bz): <span id="Bvals">0,1,0</span></label>
+        <input id="Bx" type="range" min="-5" max="5" value="0" step="1">
+        <input id="By" type="range" min="-5" max="5" value="1" step="1">
+        <input id="Bz" type="range" min="-5" max="5" value="0" step="1">
+
+        <div class="buttons">
+          <button id="showVectors">Show vectors</button>
+          <button id="resetBtn">Reset view</button>
+        </div>
+
+        <h2>Computed</h2>
+        <div>Cross A × B = <span id="crossOut">0,0,1</span></div>
+        <div style="margin-top:8px;font-size:13px;color:#a5b4fc">Tip: set A and B, then rotate the scene to observe the direction of A × B (right-hand rule).</div>
+
+        <footer class="note">To publish: create a new repo, add this file as <code>index.html</code>, enable GitHub Pages under repository settings (branch: main) — the page will be at <code>https://&lt;username&gt;.github.io/&lt;repo&gt;/</code>.</footer>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    /* Simple 3D DOM ASCII renderer + interaction */
+    const scene = document.getElementById('scene');
+    const viewport = document.getElementById('viewport');
+
+    // configuration
+    const LENGTH = 18; // axis half-length in units
+    const STEP = 1;    // step size
+    const CHAR_SIZE = 14; // px font size baseline
+
+    // chars used
+    const CH_X = '-';
+    const CH_Y = '|';
+    const CH_Z1 = '/';
+    const CH_Z2 = '\\';
+
+    // scene state
+    let rotX = -20, rotY = -30; // degrees
+    let zoom = 900; // perspective
+
+    // create base grid of axis characters
+    const elements = []; // {el, pos: [x,y,z], tag}
+
+    function addChar(x,y,z,ch,cls){
+      const el = document.createElement('div');
+      el.className = 'char '+(cls||'');
+      el.textContent = ch;
+      el.style.fontSize = CHAR_SIZE + 'px';
+      scene.appendChild(el);
+      elements.push({el,pos:[x,y,z]});
+    }
+
+    function buildAxes(){
+      scene.innerHTML = '';
+      elements.length = 0;
+      // center marker (origin)
+      addChar(0,0,0,CH_Y,'origin');
+      // X axis (red-ish) — horizontally use '-' characters along +X and -X
+      for(let i=-LENGTH;i<=LENGTH;i+=STEP){
+        if(i===0) continue;
+        addChar(i,0,0,CH_X,'axis-x');
+      }
+      // Y axis (vertical) use '|' characters
+      for(let i=-LENGTH;i<=LENGTH;i+=STEP){
+        if(i===0) continue;
+        addChar(0,i,0,CH_Y,'axis-y');
+      }
+      // Z axis use '/' on positive, '\\' on negative to visually differ
+      for(let i=-LENGTH;i<=LENGTH;i+=STEP){
+        if(i===0) continue;
+        addChar(0,0,i, i>0 ? CH_Z1 : CH_Z2,'axis-z');
+      }
+    }
+
+    buildAxes();
+
+    // projection: we will rely on CSS 3D transforms by placing elements at center and using translate3d
+    function render(){
+      // update perspective
+      viewport.style.perspective = zoom + 'px';
+      // apply rotation to the whole scene
+      scene.style.transform = `translateZ(0px) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+      // for each element, position it by translating from center using CSS translate3d
+      elements.forEach(({el,pos})=>{
+        const [x,y,z] = pos;
+        // scale units to pixels
+        const scale = 20; // pixels per unit
+        const px = x*scale;
+        const py = -y*scale; // invert y for screen coordinates
+        const pz = z*scale;
+        // center at 50% 50% and offset via translate3d
+        el.style.transform = `translate3d(${px}px, ${py}px, ${pz}px) translate(-50%,-50%)`;
+        // give a slight size depth cue based on z
+        const depth = Math.max(0.5, 1 - (pz/1000));
+        el.style.opacity = 0.9;
+        el.style.fontSize = (CHAR_SIZE*depth) + 'px';
+        el.style.filter = `drop-shadow(0 1px 1px rgba(0,0,0,0.6))`;
+        // color by nearest axis (simple): if |x| largest -> X, etc.
+        const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+        if(ax>=ay && ax>=az) el.style.color = '#fca5a5';
+        else if(ay>=ax && ay>=az) el.style.color = '#e9d5ff';
+        else el.style.color = '#86efac';
+      });
+    }
+
+    render();
+
+    // mouse controls
+    let dragging=false, lastX=0, lastY=0;
+    viewport.addEventListener('pointerdown', (e)=>{
+      dragging=true; lastX=e.clientX; lastY=e.clientY; viewport.setPointerCapture(e.pointerId);
+    });
+    window.addEventListener('pointerup', ()=> dragging=false);
+    viewport.addEventListener('pointermove', (e)=>{
+      if(!dragging) return;
+      const dx = e.clientX - lastX; const dy = e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      rotY += dx*0.4; rotX -= dy*0.4;
+      rotX = Math.max(-90, Math.min(90, rotX));
+      render();
+    });
+    // wheel to zoom
+    viewport.addEventListener('wheel', (e)=>{
+      e.preventDefault(); zoom += e.deltaY*1.5; zoom = Math.max(300, Math.min(2500, zoom)); render();
+    }, {passive:false});
+
+    // vector UI
+    const AxR = document.getElementById('Ax'); const AyR = document.getElementById('Ay'); const AzR = document.getElementById('Az');
+    const BxR = document.getElementById('Bx'); const ByR = document.getElementById('By'); const BzR = document.getElementById('Bz');
+    const Avals = document.getElementById('Avals'); const Bvals = document.getElementById('Bvals');
+    const crossOut = document.getElementById('crossOut');
+    const showVectorsBtn = document.getElementById('showVectors');
+    const resetBtn = document.getElementById('resetBtn');
+
+    function vecFromUI(){
+      const A = [Number(AxR.value), Number(AyR.value), Number(AzR.value)];
+      const B = [Number(BxR.value), Number(ByR.value), Number(BzR.value)];
+      Avals.textContent = A.join(','); Bvals.textContent = B.join(',');
+      return {A,B};
+    }
+
+    function cross(a,b){
+      return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+    }
+
+    // container for vector elements
+    let vectorEls = [];
+    function clearVectors(){vectorEls.forEach(x=>x.el.remove()); vectorEls=[]}
+
+    function drawVector(vec, ch){
+      // draw from origin to vec as a sequence of characters along rounded positions
+      const [x,y,z] = vec;
+      const steps = Math.max(1, Math.round(Math.hypot(x,y,z)*4));
+      for(let i=1;i<=steps;i++){
+        const t = i/steps;
+        const px = x*t, py = y*t, pz = z*t;
+        const el = document.createElement('div'); el.className='char vect';
+        // choose char by dominant axis of local direction
+        const dir = [x, y, z];
+        const adx = Math.abs(dir[0]), ady = Math.abs(dir[1]), adz = Math.abs(dir[2]);
+        let chcur = CH_X;
+        if(ady>=adx && ady>=adz) chcur = CH_Y;
+        else if(adz>=adx && adz>=ady) chcur = (z>=0?CH_Z1:CH_Z2);
+        el.textContent = chcur;
+        el.style.fontSize = CHAR_SIZE+'px';
+        scene.appendChild(el);
+        vectorEls.push({el,pos:[px,py,pz]});
+      }
+    }
+
+    function showVectors(){
+      clearVectors();
+      const {A,B} = vecFromUI();
+      // draw A in one style, B in another, cross in third
+      drawVector(A,'A');
+      drawVector(B,'B');
+      const C = cross(A,B);
+      drawVector(C,'C');
+      crossOut.textContent = C.map(n=>Math.round(n*100)/100).join(',');
+      render();
+    }
+
+    // attach listeners
+    [AxR,AyR,AzR,BxR,ByR,BzR].forEach(inp=>inp.addEventListener('input', ()=>{
+      vecFromUI();
+    }));
+
+    showVectorsBtn.addEventListener('click', ()=> showVectors());
+    resetBtn.addEventListener('click', ()=>{rotX=-20;rotY=-30;zoom=900;render();});
+
+    // on each render, update positions of vector elements too
+    const originalRender = render;
+    function render(){
+      viewport.style.perspective = zoom + 'px';
+      scene.style.transform = `translateZ(0px) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+      elements.forEach(({el,pos})=>{
+        const [x,y,z] = pos;
+        const scale = 20;
+        const px = x*scale; const py = -y*scale; const pz = z*scale;
+        el.style.transform = `translate3d(${px}px, ${py}px, ${pz}px) translate(-50%,-50%)`;
+        const depth = Math.max(0.45, 1 - (pz/1000));
+        el.style.fontSize = (CHAR_SIZE*depth) + 'px';
+        el.style.opacity = 0.9;
+        const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+        if(ax>=ay && ax>=az) el.style.color = '#fca5a5';
+        else if(ay>=ax && ay>=az) el.style.color = '#e9d5ff';
+        else el.style.color = '#86efac';
+      });
+      // vector elements
+      vectorEls.forEach(({el,pos})=>{
+        const [x,y,z] = pos; const scale=20; const px=x*scale; const py=-y*scale; const pz=z*scale;
+        el.style.transform = `translate3d(${px}px, ${py}px, ${pz}px) translate(-50%,-50%)`;
+        el.style.fontSize = (CHAR_SIZE*0.95) + 'px';
+        // color vector characters differently
+        // color by sign of their vector: A-blue, B-yellow, C-green (approx)
+        // Determine which vector they belong to by nearest to endpoints (hack)
+        // We'll color by distance to last A/B/C positions
+      });
+    }
+
+    // initial UI values
+    vecFromUI();
+    // draw a default cross for demonstration
+    showVectors();
+
+    // small accessibility: keyboard rotate
+    window.addEventListener('keydown',(e)=>{
+      if(e.key==='ArrowLeft') { rotY-=6; render(); }
+      if(e.key==='ArrowRight') { rotY+=6; render(); }
+      if(e.key==='ArrowUp') { rotX-=6; render(); }
+      if(e.key==='ArrowDown') { rotX+=6; render(); }
+    });
+
+    // finished
+  </script>
+</body>
+</html>
