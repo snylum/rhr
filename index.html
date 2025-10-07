@@ -120,7 +120,7 @@
                 Rotation: <span id="plane-rotation">0°, 0°</span>
             </div>
             <div class="arrow-controls">
-                <h3>ADD VECTOR</h3>
+                <h3>VECTORS (Right Hand Rule)</h3>
                 <div class="input-group">
                     <label>i:</label><input type="number" id="vec-i" value="5" step="1">
                     <label>j:</label><input type="number" id="vec-j" value="5" step="1">
@@ -128,8 +128,9 @@
                 <div class="input-group">
                     <label>k:</label><input type="number" id="vec-k" value="5" step="1">
                 </div>
-                <button onclick="addVector()">Add Arrow</button>
+                <button onclick="addVector()">Add Vector</button>
                 <button onclick="clearVectors()">Clear All</button>
+                <button onclick="resetPlaneView()">Reset View</button>
             </div>
             <div id="ascii-plane"></div>
         </div>
@@ -145,7 +146,8 @@
                 <button onclick="setFingers('fist')">Fist</button>
                 <button onclick="setFingers('open')">Open Hand</button><br>
                 <button onclick="setFingers('point')">Point</button>
-                <button onclick="setFingers('peace')">Peace</button>
+                <button onclick="setFingers('peace')">Peace</button><br>
+                <button onclick="resetHandView()">Reset View</button>
             </div>
             <div id="ascii-hand"></div>
         </div>
@@ -214,19 +216,56 @@
             // Origin
             points.push({x: 0, y: 0, z: 0, char: '⊕', color: 4});
 
-            // Add vectors
-            vectors.forEach(vec => {
-                let steps = Math.max(Math.abs(vec.i), Math.abs(vec.j), Math.abs(vec.k)) * 2;
+            // Add vectors with smooth lines
+            vectors.forEach((vec, idx) => {
+                let steps = Math.max(Math.abs(vec.i), Math.abs(vec.j), Math.abs(vec.k)) * 3;
+                let prevProj = null;
+                
                 for (let s = 0; s <= steps; s++) {
                     let t = s / steps;
-                    points.push({
-                        x: vec.i * t,
-                        y: vec.j * t,
-                        z: vec.k * t,
-                        char: s === steps ? '▶' : '█',
-                        color: 5
-                    });
+                    let x = vec.i * t;
+                    let y = vec.j * t;
+                    let z = vec.k * t;
+                    
+                    let rot = rotate3D(x, y, z, rotX, rotY);
+                    let proj = project(rot.x, rot.y, rot.z);
+                    
+                    if (prevProj) {
+                        // Draw line between previous and current point
+                        let dx = proj.x - prevProj.x;
+                        let dy = proj.y - prevProj.y;
+                        let dist = Math.sqrt(dx * dx + dy * dy);
+                        let lineSteps = Math.ceil(dist);
+                        
+                        for (let l = 0; l <= lineSteps; l++) {
+                            let lt = l / lineSteps;
+                            let lx = prevProj.x + dx * lt;
+                            let ly = prevProj.y + dy * lt;
+                            let lz = prevProj.z + (proj.z - prevProj.z) * lt;
+                            
+                            points.push({
+                                x: lx + 60,
+                                y: ly + 30,
+                                z: lz,
+                                char: '█',
+                                color: 5
+                            });
+                        }
+                    }
+                    
+                    prevProj = proj;
                 }
+                
+                // Arrowhead at the end
+                let rot = rotate3D(vec.i, vec.j, vec.k, rotX, rotY);
+                let proj = project(rot.x, rot.y, rot.z);
+                points.push({
+                    x: proj.x + 60,
+                    y: proj.y + 30,
+                    z: proj.z,
+                    char: '►',
+                    color: 5
+                });
             });
 
             // Transform points
@@ -257,63 +296,69 @@
         function generateHand(rotX, rotY) {
             let points = [];
             
-            // Palm - more hand-shaped
-            let palmShape = [
-                [0,0,0,1,1,1,1,1,1,0,0],
-                [0,0,1,1,1,1,1,1,1,1,0],
-                [0,1,1,1,1,1,1,1,1,1,1],
-                [1,1,1,1,1,1,1,1,1,1,1],
-                [1,1,1,1,1,1,1,1,1,1,0],
-                [1,1,1,1,1,1,1,1,1,1,0],
-                [0,1,1,1,1,1,1,1,1,1,0],
-                [0,0,1,1,1,1,1,1,1,0,0],
-                [0,0,0,1,1,1,1,1,0,0,0]
-            ];
-
-            for (let y = 0; y < palmShape.length; y++) {
-                for (let x = 0; x < palmShape[y].length; x++) {
-                    if (palmShape[y][x]) {
-                        points.push({x: x - 5, y: y + 5, z: 0, char: '█'});
+            // Palm - thicker 3D palm with depth
+            for (let y = 5; y < 14; y++) {
+                for (let x = -4; x <= 4; x++) {
+                    for (let z = -1; z <= 1; z++) {
+                        if (Math.abs(x) <= 4 - Math.abs(y - 9) * 0.3) {
+                            points.push({x, y, z, char: '█'});
+                        }
                     }
                 }
             }
 
-            // Thumb
+            // Thumb - with 3D depth
             if (fingerStates[0]) {
-                let thumbPoints = [
-                    {x: -5, y: 3, z: 0}, {x: -6, y: 2, z: 0}, {x: -7, y: 1, z: 0},
-                    {x: -7, y: 0, z: 0}, {x: -7, y: -1, z: 0}, {x: -6, y: -2, z: 0}
-                ];
-                thumbPoints.forEach(p => points.push({...p, char: '█'}));
+                // Thumb up (perpendicular)
+                for (let i = 0; i < 6; i++) {
+                    for (let z = -1; z <= 1; z++) {
+                        points.push({x: -5 - i * 0.3, y: 8 - i, z, char: '█'});
+                    }
+                }
             } else {
-                let thumbPoints = [{x: -5, y: 5, z: 0}, {x: -5, y: 6, z: 0}, {x: -5, y: 7, z: 0}];
-                thumbPoints.forEach(p => points.push({...p, char: '█'}));
+                // Thumb curled
+                for (let i = 0; i < 3; i++) {
+                    for (let z = -1; z <= 1; z++) {
+                        points.push({x: -4, y: 7 + i, z, char: '█'});
+                    }
+                }
             }
 
-            // Fingers
+            // Fingers - with 3D volume
             let fingerX = [-2, 0, 2, 4];
             for (let f = 0; f < 4; f++) {
                 let fx = fingerX[f];
                 let extended = fingerStates[f + 1];
                 
                 if (extended) {
-                    for (let i = 0; i < 7; i++) {
-                        points.push({x: fx, y: 0 - i, z: 0, char: '█'});
+                    // Extended finger with thickness
+                    for (let i = 0; i < 8; i++) {
+                        for (let dx = -0.5; dx <= 0.5; dx++) {
+                            for (let z = -0.5; z <= 0.5; z++) {
+                                points.push({x: fx + dx, y: 4 - i, z, char: '█'});
+                            }
+                        }
                     }
                     // Fingertip
-                    points.push({x: fx, y: -7, z: 0, char: '▀'});
+                    points.push({x: fx, y: -4, z: 0, char: '▀'});
                 } else {
-                    // Curled
+                    // Curled finger with volume
                     for (let i = 0; i < 3; i++) {
-                        points.push({x: fx, y: 2 - i, z: 0, char: '█'});
+                        for (let dx = -0.5; dx <= 0.5; dx++) {
+                            for (let z = -0.5; z <= 0.5; z++) {
+                                points.push({x: fx + dx, y: 4 - i, z, char: '█'});
+                            }
+                        }
                     }
                 }
             }
 
-            // Wrist
-            for (let y = 14; y < 18; y++) {
+            // Wrist - with 3D depth
+            for (let y = 14; y < 19; y++) {
                 for (let x = -3; x <= 3; x++) {
-                    points.push({x, y, z: 0, char: '▓'});
+                    for (let z = -1; z <= 1; z++) {
+                        points.push({x, y, z, char: '▓'});
+                    }
                 }
             }
 
@@ -387,6 +432,18 @@
         function clearVectors() {
             vectors = [];
             updatePlane();
+        }
+
+        function resetPlaneView() {
+            planeRotX = 0.3;
+            planeRotY = 0.5;
+            updatePlane();
+        }
+
+        function resetHandView() {
+            handRotX = 0.2;
+            handRotY = -0.3;
+            updateHand();
         }
 
         let planeEl = document.getElementById('ascii-plane');
