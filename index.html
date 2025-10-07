@@ -1,160 +1,346 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>3D ASCII Hand + Axes (Right-Hand Rule)</title>
-<style>
-body {
-  margin: 0;
-  background: #000;
-  color: #fff;
-  font-family: monospace;
-  overflow: hidden;
-}
-#ui {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  background: rgba(0,0,0,0.5);
-  padding: 10px;
-  border-radius: 10px;
-  font-size: 13px;
-  line-height: 1.4;
-  max-width: 240px;
-}
-input[type=range]{width:100%;}
-canvas { width: 100vw; height: 100vh; display: block; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASCII 3D Interactive Visualization</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            user-select: none;
+        }
+        #container {
+            display: flex;
+            gap: 40px;
+            height: 90vh;
+        }
+        #plane-container, #hand-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            padding: 20px;
+            position: relative;
+        }
+        #ascii-plane, #ascii-hand {
+            font-size: 12px;
+            line-height: 1.2;
+            white-space: pre;
+            cursor: move;
+            text-shadow: 0 0 5px #00ff00;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 11px;
+            color: #00ff00;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        .hand-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 11px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        button {
+            background: #003300;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px 10px;
+            margin: 2px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        button:hover {
+            background: #005500;
+        }
+        h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div id="ui">
-  <b>3D ASCII Hand + Axes</b><br>
-  (Drag: rotate, Scroll: zoom)<br>
-  <label>Thumb raise</label><input id="thumbBase" type="range" min="-90" max="90" value="20">
-  <label>Thumb curl</label><input id="thumbCurl" type="range" min="0" max="90" value="20">
-  <label>Fingers curl</label><input id="curl" type="range" min="0" max="90" value="10">
-  <label>Hand RotX</label><input id="rotX" type="range" min="-180" max="180" value="0">
-  <label>Hand RotY</label><input id="rotY" type="range" min="-180" max="180" value="0">
-  <label>Hand RotZ</label><input id="rotZ" type="range" min="-180" max="180" value="0">
-</div>
-<script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d", {alpha:false});
-function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}
-resize();window.addEventListener("resize",resize);
-function deg(a){return a*Math.PI/180;}
-function rotMatrix(ax,ay,az){
-  const sx=Math.sin(ax),cx=Math.cos(ax);
-  const sy=Math.sin(ay),cy=Math.cos(ay);
-  const sz=Math.sin(az),cz=Math.cos(az);
-  return [
-    cz*cy, cz*sy*sx - sz*cx, cz*sy*cx + sz*sx,
-    sz*cy, sz*sy*sx + cz*cx, sz*sy*cx - cz*sx,
-    -sy, cy*sx, cy*cx
-  ];
-}
-function matMulVec(m,v){return[
-  m[0]*v[0]+m[1]*v[1]+m[2]*v[2],
-  m[3]*v[0]+m[4]*v[1]+m[5]*v[2],
-  m[6]*v[0]+m[7]*v[1]+m[8]*v[2]
-];}
-function project(v){
-  const f=400*zoom;
-  return [canvas.width/2+v[0]*f/(f+v[2]),canvas.height/2-v[1]*f/(f+v[2])];
-}
-function chooseChar(dx,dy){
-  const a=Math.atan2(dy,dx)*180/Math.PI;
-  const A=(a+360)%360;
-  if(A<22.5||A>=337.5) return '-';
-  if(A<67.5) return '/';
-  if(A<112.5) return '|';
-  if(A<157.5) return '\\';
-  if(A<202.5) return '-';
-  if(A<247.5) return '/';
-  if(A<292.5) return '|';
-  return '\\';
-}
-function drawLine(a,b,color){
-  const ta=matMulVec(R,a),tb=matMulVec(R,b);
-  const dx=tb[0]-ta[0],dy=tb[1]-ta[1],dz=tb[2]-ta[2];
-  const steps=Math.max(2,Math.round(Math.hypot(dx,dy,dz)*12));
-  let p=[ta[0],ta[1],ta[2]],prev=null;
-  for(let i=0;i<=steps;i++){
-    const t=i/steps;
-    const v=[ta[0]+dx*t,ta[1]+dy*t,ta[2]+dz*t];
-    const [x,y]=project(v);
-    if(prev){
-      const ch=chooseChar(x-prev[0],y-prev[1]);
-      ctx.fillStyle=color;
-      ctx.fillText(ch,x,y);
-    }
-    prev=[x,y];
-  }
-}
-function drawAxes(){
-  drawLine([0,0,0],[3,0,0],'#ff5555'); // X red
-  drawLine([0,0,0],[0,3,0],'#55ff55'); // Y green
-  drawLine([0,0,0],[0,0,3],'#5599ff'); // Z blue
-}
-const ui={rotX:rotX,rotY:rotY,rotZ:rotZ,thumbBase:thumbBase,thumbCurl:thumbCurl,curl:curl};
-let zoom=1,R;
-function drawHand(){
-  const tb=+ui.thumbBase.value,tc=+ui.thumbCurl.value,curl=+ui.curl.value;
-  function segs(base,len,n,spreadX){
-    const pts=[[...base]];
-    let p=[...base];let dir=[0,1,0];
-    for(let i=0;i<n;i++){
-      const ang=-deg(curl*(i+1)/n);
-      const Rx=[1,0,0,0,Math.cos(ang),-Math.sin(ang),0,Math.sin(ang),Math.cos(ang)];
-      dir=matMulVec(Rx,dir);
-      p=[p[0]+dir[0]*len,p[1]+dir[1]*len,p[2]+dir[2]*len];
-      pts.push([...p]);
-    }
-    return pts;
-  }
-  const bases=[[1.5,0,0],[0.5,0,0],[-0.5,0,0],[-1.5,0,0]];
-  const colors=['#ffd','#ffd','#ffd','#ffd'];
-  for(let f=0;f<4;f++){
-    const pts=segs(bases[f],[0.8,2,0],3,0);
-    for(let i=0;i<pts.length-1;i++) drawLine(pts[i],pts[i+1],colors[f]);
-  }
-  const thumbBase=[2,-0.5,-0.5];
-  const thumbLen=[1.2,1.0];
-  let p=[...thumbBase];let dir=[1,0,0];
-  const yaw=deg(tb);
-  const Rz=[Math.cos(yaw),-Math.sin(yaw),0,Math.sin(yaw),Math.cos(yaw),0,0,0,1];
-  dir=matMulVec(Rz,dir);
-  let a=[p];
-  for(let i=0;i<2;i++){
-    const ang=-deg(tc*(i+1)/2);
-    const Rx=[1,0,0,0,Math.cos(ang),-Math.sin(ang),0,Math.sin(ang),Math.cos(ang)];
-    dir=matMulVec(Rx,dir);
-    p=[p[0]+dir[0]*thumbLen[i],p[1]+dir[1]*thumbLen[i],p[2]+dir[2]*thumbLen[i]];
-    a.push([...p]);
-  }
-  for(let i=0;i<a.length-1;i++) drawLine(a[i],a[i+1],'#afa');
-}
-let dragging=false,lx=0,ly=0;
-canvas.addEventListener("mousedown",e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
-window.addEventListener("mouseup",()=>dragging=false);
-canvas.addEventListener("mousemove",e=>{
-  if(!dragging)return;
-  const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;
-  ui.rotY.value=+ui.rotY.value+dx*0.4;
-  ui.rotX.value=+ui.rotX.value+dy*0.4;
-});
-canvas.addEventListener("wheel",e=>{zoom*=(e.deltaY>0?0.9:1.1);e.preventDefault();},{passive:false});
-function loop(){
-  ctx.fillStyle="#000";ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.font="16px monospace";
-  R=rotMatrix(deg(+ui.rotX.value),deg(+ui.rotY.value),deg(+ui.rotZ.value));
-  drawAxes();
-  drawHand();
-  requestAnimationFrame(loop);
-}
-loop();
-</script>
+    <div id="container">
+        <div id="plane-container">
+            <div class="controls">
+                <h3>XYZ Coordinate Plane</h3>
+                Drag to rotate<br>
+                Rotation: <span id="plane-rotation">0°, 0°</span>
+            </div>
+            <div id="ascii-plane"></div>
+        </div>
+        
+        <div id="hand-container">
+            <div class="controls">
+                <h3>ASCII Hand</h3>
+                Drag to rotate<br>
+                Rotation: <span id="hand-rotation">0°, 0°</span>
+            </div>
+            <div class="hand-controls">
+                <button onclick="toggleThumb()">Toggle Thumb</button><br>
+                <button onclick="toggleFinger(0)">Index</button>
+                <button onclick="toggleFinger(1)">Middle</button>
+                <button onclick="toggleFinger(2)">Ring</button>
+                <button onclick="toggleFinger(3)">Pinky</button>
+            </div>
+            <div id="ascii-hand"></div>
+        </div>
+    </div>
+
+    <script>
+        // Plane rotation state
+        let planeRotX = 0, planeRotY = 0;
+        let planeDragging = false;
+        let planeLastX = 0, planeLastY = 0;
+
+        // Hand rotation state
+        let handRotX = 0, handRotY = 0;
+        let handDragging = false;
+        let handLastX = 0, handLastY = 0;
+
+        // Hand articulation state
+        let thumbUp = false;
+        let fingers = [false, false, false, false]; // extended state for each finger
+
+        function generate3DPlane(rotX, rotY) {
+            const size = 20;
+            const points = [];
+            
+            // Generate grid points
+            for (let x = -size; x <= size; x += 2) {
+                for (let y = -size; y <= size; y += 2) {
+                    for (let z = -size; z <= size; z += 2) {
+                        // Only draw axes and grid lines
+                        if ((x === 0 && y === 0) || (x === 0 && z === 0) || (y === 0 && z === 0)) {
+                            points.push({x, y, z, char: '+'});
+                        }
+                    }
+                }
+            }
+
+            // Add axis lines
+            for (let i = -size; i <= size; i += 2) {
+                points.push({x: i, y: 0, z: 0, char: i === 0 ? '+' : '-'});
+                points.push({x: 0, y: i, z: 0, char: i === 0 ? '+' : '|'});
+                points.push({x: 0, y: 0, z: i, char: i === 0 ? '+' : '/'});
+            }
+
+            // Rotate and project points
+            const projected = points.map(p => {
+                let {x, y, z} = p;
+                
+                // Rotate around Y axis
+                const cosY = Math.cos(rotY);
+                const sinY = Math.sin(rotY);
+                let xr = x * cosY - z * sinY;
+                let zr = x * sinY + z * cosY;
+                x = xr;
+                z = zr;
+                
+                // Rotate around X axis
+                const cosX = Math.cos(rotX);
+                const sinX = Math.sin(rotX);
+                let yr = y * cosX - z * sinX;
+                zr = y * sinX + z * cosX;
+                y = yr;
+                z = zr;
+                
+                // Perspective projection
+                const perspective = 200 / (200 + z);
+                const px = Math.round(x * perspective) + 40;
+                const py = Math.round(y * perspective) + 25;
+                
+                return {x: px, y: py, z: z, char: p.char};
+            });
+
+            // Sort by z-depth
+            projected.sort((a, b) => a.z - b.z);
+
+            // Create ASCII canvas
+            const canvas = Array(50).fill(null).map(() => Array(80).fill(' '));
+            
+            projected.forEach(p => {
+                if (p.x >= 0 && p.x < 80 && p.y >= 0 && p.y < 50) {
+                    canvas[p.y][p.x] = p.char;
+                }
+            });
+
+            return canvas.map(row => row.join('')).join('\n');
+        }
+
+        function generateHand(rotX, rotY) {
+            // Base hand structure
+            const handPoints = [];
+            
+            // Palm
+            for (let x = 0; x < 10; x++) {
+                for (let y = 0; y < 15; y++) {
+                    if (x >= 2 && x <= 7 && y >= 5 && y <= 12) {
+                        handPoints.push({x, y, z: 0, char: '#'});
+                    }
+                }
+            }
+
+            // Thumb
+            if (thumbUp) {
+                for (let i = 0; i < 6; i++) {
+                    handPoints.push({x: 1, y: 8 - i, z: 0, char: '|'});
+                }
+                handPoints.push({x: 1, y: 2, z: 0, char: 'O'});
+            } else {
+                for (let i = 0; i < 4; i++) {
+                    handPoints.push({x: 1 + i, y: 10, z: 0, char: '-'});
+                }
+                handPoints.push({x: 5, y: 10, z: 0, char: 'O'});
+            }
+
+            // Fingers
+            const fingerX = [3, 4, 5, 6];
+            const fingerNames = ['/', '|', '|', '\\'];
+            
+            fingerX.forEach((fx, idx) => {
+                if (fingers[idx]) {
+                    // Extended
+                    for (let i = 0; i < 8; i++) {
+                        handPoints.push({x: fx, y: 4 - i, z: i * 0.5, char: fingerNames[idx]});
+                    }
+                    handPoints.push({x: fx, y: -4, z: 4, char: 'o'});
+                } else {
+                    // Curled
+                    for (let i = 0; i < 3; i++) {
+                        handPoints.push({x: fx, y: 4 - i, z: 0, char: fingerNames[idx]});
+                    }
+                    handPoints.push({x: fx, y: 1, z: 0, char: 'o'});
+                }
+            });
+
+            // Wrist
+            for (let y = 13; y < 18; y++) {
+                for (let x = 3; x < 7; x++) {
+                    handPoints.push({x, y, z: 0, char: '='});
+                }
+            }
+
+            // Rotate and project
+            const projected = handPoints.map(p => {
+                let {x, y, z} = p;
+                x -= 5; y -= 10; // Center
+                
+                const cosY = Math.cos(rotY);
+                const sinY = Math.sin(rotY);
+                let xr = x * cosY - z * sinY;
+                let zr = x * sinY + z * cosY;
+                x = xr; z = zr;
+                
+                const cosX = Math.cos(rotX);
+                const sinX = Math.sin(rotX);
+                let yr = y * cosX - z * sinX;
+                zr = y * sinX + z * cosX;
+                y = yr; z = zr;
+                
+                const perspective = 100 / (100 + z);
+                const px = Math.round(x * perspective * 2) + 40;
+                const py = Math.round(y * perspective) + 25;
+                
+                return {x: px, y: py, z: z, char: p.char};
+            });
+
+            projected.sort((a, b) => a.z - b.z);
+
+            const canvas = Array(50).fill(null).map(() => Array(80).fill(' '));
+            projected.forEach(p => {
+                if (p.x >= 0 && p.x < 80 && p.y >= 0 && p.y < 50) {
+                    canvas[p.y][p.x] = p.char;
+                }
+            });
+
+            return canvas.map(row => row.join('')).join('\n');
+        }
+
+        function updatePlane() {
+            document.getElementById('ascii-plane').textContent = generate3DPlane(planeRotX, planeRotY);
+            document.getElementById('plane-rotation').textContent = 
+                `${Math.round(planeRotX * 180 / Math.PI)}°, ${Math.round(planeRotY * 180 / Math.PI)}°`;
+        }
+
+        function updateHand() {
+            document.getElementById('ascii-hand').textContent = generateHand(handRotX, handRotY);
+            document.getElementById('hand-rotation').textContent = 
+                `${Math.round(handRotX * 180 / Math.PI)}°, ${Math.round(handRotY * 180 / Math.PI)}°`;
+        }
+
+        function toggleThumb() {
+            thumbUp = !thumbUp;
+            updateHand();
+        }
+
+        function toggleFinger(idx) {
+            fingers[idx] = !fingers[idx];
+            updateHand();
+        }
+
+        // Plane mouse events
+        const planeEl = document.getElementById('ascii-plane');
+        planeEl.addEventListener('mousedown', (e) => {
+            planeDragging = true;
+            planeLastX = e.clientX;
+            planeLastY = e.clientY;
+        });
+
+        // Hand mouse events
+        const handEl = document.getElementById('ascii-hand');
+        handEl.addEventListener('mousedown', (e) => {
+            handDragging = true;
+            handLastX = e.clientX;
+            handLastY = e.clientY;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (planeDragging) {
+                const dx = e.clientX - planeLastX;
+                const dy = e.clientY - planeLastY;
+                planeRotY += dx * 0.01;
+                planeRotX += dy * 0.01;
+                planeLastX = e.clientX;
+                planeLastY = e.clientY;
+                updatePlane();
+            }
+            if (handDragging) {
+                const dx = e.clientX - handLastX;
+                const dy = e.clientY - handLastY;
+                handRotY += dx * 0.01;
+                handRotX += dy * 0.01;
+                handLastX = e.clientX;
+                handLastY = e.clientY;
+                updateHand();
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            planeDragging = false;
+            handDragging = false;
+        });
+
+        // Initial render
+        updatePlane();
+        updateHand();
+    </script>
 </body>
 </html>
