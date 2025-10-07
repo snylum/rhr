@@ -29,13 +29,15 @@
             border-radius: 10px;
             padding: 20px;
             position: relative;
+            background: rgba(0, 20, 0, 0.3);
         }
         #ascii-plane, #ascii-hand {
-            font-size: 12px;
-            line-height: 1.2;
+            font-size: 14px;
+            line-height: 1.1;
             white-space: pre;
             cursor: move;
-            text-shadow: 0 0 5px #00ff00;
+            text-shadow: 0 0 8px #00ff00;
+            letter-spacing: 2px;
         }
         .controls {
             position: absolute;
@@ -43,19 +45,26 @@
             left: 10px;
             font-size: 11px;
             color: #00ff00;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.8);
             padding: 10px;
             border-radius: 5px;
+            border: 1px solid #00ff00;
             z-index: 10;
         }
-        .hand-controls {
+        .hand-controls, .arrow-controls {
             position: absolute;
             bottom: 10px;
             left: 10px;
             font-size: 11px;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.8);
             padding: 10px;
             border-radius: 5px;
+            border: 1px solid #00ff00;
+        }
+        .arrow-controls {
+            left: auto;
+            right: 10px;
+            width: 200px;
         }
         button {
             background: #003300;
@@ -66,13 +75,34 @@
             cursor: pointer;
             border-radius: 3px;
             font-family: 'Courier New', monospace;
+            font-size: 10px;
         }
         button:hover {
             background: #005500;
         }
+        button:active {
+            background: #007700;
+        }
         h3 {
             margin: 0 0 10px 0;
-            font-size: 14px;
+            font-size: 13px;
+        }
+        input[type="number"] {
+            width: 50px;
+            background: #001100;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            border-radius: 3px;
+        }
+        label {
+            font-size: 10px;
+            margin-right: 5px;
+        }
+        .input-group {
+            margin: 5px 0;
         }
     </style>
 </head>
@@ -80,104 +110,138 @@
     <div id="container">
         <div id="plane-container">
             <div class="controls">
-                <h3>XYZ Coordinate Plane</h3>
+                <h3>XYZ COORDINATE PLANE</h3>
                 Drag to rotate<br>
                 Rotation: <span id="plane-rotation">0°, 0°</span>
+            </div>
+            <div class="arrow-controls">
+                <h3>ADD VECTOR</h3>
+                <div class="input-group">
+                    <label>i:</label><input type="number" id="vec-i" value="5" step="1">
+                    <label>j:</label><input type="number" id="vec-j" value="5" step="1">
+                </div>
+                <div class="input-group">
+                    <label>k:</label><input type="number" id="vec-k" value="5" step="1">
+                </div>
+                <button onclick="addVector()">Add Arrow</button>
+                <button onclick="clearVectors()">Clear All</button>
             </div>
             <div id="ascii-plane"></div>
         </div>
         
         <div id="hand-container">
             <div class="controls">
-                <h3>ASCII Hand</h3>
+                <h3>ASCII HAND</h3>
                 Drag to rotate<br>
                 Rotation: <span id="hand-rotation">0°, 0°</span>
             </div>
             <div class="hand-controls">
-                <button onclick="toggleThumb()">Toggle Thumb</button><br>
-                <button onclick="toggleFinger(0)">Index</button>
-                <button onclick="toggleFinger(1)">Middle</button>
-                <button onclick="toggleFinger(2)">Ring</button>
-                <button onclick="toggleFinger(3)">Pinky</button>
+                <button onclick="toggleThumb()">Thumb Up/Down</button><br>
+                <button onclick="setFingers('fist')">Fist</button>
+                <button onclick="setFingers('open')">Open Hand</button><br>
+                <button onclick="setFingers('point')">Point</button>
+                <button onclick="setFingers('peace')">Peace</button>
             </div>
             <div id="ascii-hand"></div>
         </div>
     </div>
 
     <script>
-        // Plane rotation state
-        let planeRotX = 0, planeRotY = 0;
+        let planeRotX = 0.3, planeRotY = 0.5;
         let planeDragging = false;
         let planeLastX = 0, planeLastY = 0;
 
-        // Hand rotation state
-        let handRotX = 0, handRotY = 0;
+        let handRotX = 0.2, handRotY = -0.3;
         let handDragging = false;
         let handLastX = 0, handLastY = 0;
 
-        // Hand articulation state
-        let thumbUp = false;
-        let fingers = [false, false, false, false]; // extended state for each finger
+        let thumbUp = true;
+        let fingerStates = [1, 1, 1, 1, 1]; // 0=curled, 1=extended (thumb, index, middle, ring, pinky)
+        
+        let vectors = [];
+
+        function rotate3D(x, y, z, rotX, rotY) {
+            let cosY = Math.cos(rotY);
+            let sinY = Math.sin(rotY);
+            let xr = x * cosY - z * sinY;
+            let zr = x * sinY + z * cosY;
+            x = xr;
+            z = zr;
+            
+            let cosX = Math.cos(rotX);
+            let sinX = Math.sin(rotX);
+            let yr = y * cosX - z * sinX;
+            zr = y * sinX + z * cosX;
+            
+            return {x, y: yr, z: zr};
+        }
+
+        function project(x, y, z, scale = 200) {
+            let perspective = scale / (scale + z);
+            return {
+                x: Math.round(x * perspective),
+                y: Math.round(y * perspective),
+                z: z
+            };
+        }
 
         function generate3DPlane(rotX, rotY) {
-            const size = 20;
-            const points = [];
+            let points = [];
+            let size = 15;
             
-            // Generate grid points
-            for (let x = -size; x <= size; x += 2) {
-                for (let y = -size; y <= size; y += 2) {
-                    for (let z = -size; z <= size; z += 2) {
-                        // Only draw axes and grid lines
-                        if ((x === 0 && y === 0) || (x === 0 && z === 0) || (y === 0 && z === 0)) {
-                            points.push({x, y, z, char: '+'});
-                        }
+            // Axes
+            for (let i = -size; i <= size; i++) {
+                points.push({x: i, y: 0, z: 0, char: '─', color: 1}); // X axis
+                points.push({x: 0, y: i, z: 0, char: '│', color: 2}); // Y axis
+                points.push({x: 0, y: 0, z: i, char: '/', color: 3}); // Z axis
+            }
+            
+            // Grid lines on XY plane
+            for (let i = -size; i <= size; i += 5) {
+                for (let j = -size; j <= size; j++) {
+                    if (i !== 0 && j !== 0) {
+                        points.push({x: i, y: j, z: 0, char: '·', color: 0});
+                        points.push({x: j, y: i, z: 0, char: '·', color: 0});
                     }
                 }
             }
 
-            // Add axis lines
-            for (let i = -size; i <= size; i += 2) {
-                points.push({x: i, y: 0, z: 0, char: i === 0 ? '+' : '-'});
-                points.push({x: 0, y: i, z: 0, char: i === 0 ? '+' : '|'});
-                points.push({x: 0, y: 0, z: i, char: i === 0 ? '+' : '/'});
-            }
+            // Origin
+            points.push({x: 0, y: 0, z: 0, char: '⊕', color: 4});
 
-            // Rotate and project points
-            const projected = points.map(p => {
-                let {x, y, z} = p;
-                
-                // Rotate around Y axis
-                const cosY = Math.cos(rotY);
-                const sinY = Math.sin(rotY);
-                let xr = x * cosY - z * sinY;
-                let zr = x * sinY + z * cosY;
-                x = xr;
-                z = zr;
-                
-                // Rotate around X axis
-                const cosX = Math.cos(rotX);
-                const sinX = Math.sin(rotX);
-                let yr = y * cosX - z * sinX;
-                zr = y * sinX + z * cosX;
-                y = yr;
-                z = zr;
-                
-                // Perspective projection
-                const perspective = 200 / (200 + z);
-                const px = Math.round(x * perspective) + 40;
-                const py = Math.round(y * perspective) + 25;
-                
-                return {x: px, y: py, z: z, char: p.char};
+            // Add vectors
+            vectors.forEach(vec => {
+                let steps = Math.max(Math.abs(vec.i), Math.abs(vec.j), Math.abs(vec.k)) * 2;
+                for (let s = 0; s <= steps; s++) {
+                    let t = s / steps;
+                    points.push({
+                        x: vec.i * t,
+                        y: vec.j * t,
+                        z: vec.k * t,
+                        char: s === steps ? '▶' : '█',
+                        color: 5
+                    });
+                }
             });
 
-            // Sort by z-depth
+            // Transform points
+            let projected = points.map(p => {
+                let rot = rotate3D(p.x, p.y, p.z, rotX, rotY);
+                let proj = project(rot.x, rot.y, rot.z);
+                return {
+                    x: proj.x + 60,
+                    y: proj.y + 30,
+                    z: proj.z,
+                    char: p.char,
+                    color: p.color
+                };
+            });
+
             projected.sort((a, b) => a.z - b.z);
 
-            // Create ASCII canvas
-            const canvas = Array(50).fill(null).map(() => Array(80).fill(' '));
-            
+            let canvas = Array(60).fill(null).map(() => Array(120).fill(' '));
             projected.forEach(p => {
-                if (p.x >= 0 && p.x < 80 && p.y >= 0 && p.y < 50) {
+                if (p.x >= 0 && p.x < 120 && p.y >= 0 && p.y < 60) {
                     canvas[p.y][p.x] = p.char;
                 }
             });
@@ -186,87 +250,85 @@
         }
 
         function generateHand(rotX, rotY) {
-            // Base hand structure
-            const handPoints = [];
+            let points = [];
             
-            // Palm
-            for (let x = 0; x < 10; x++) {
-                for (let y = 0; y < 15; y++) {
-                    if (x >= 2 && x <= 7 && y >= 5 && y <= 12) {
-                        handPoints.push({x, y, z: 0, char: '#'});
+            // Palm - more hand-shaped
+            let palmShape = [
+                [0,0,0,1,1,1,1,1,1,0,0],
+                [0,0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,0],
+                [1,1,1,1,1,1,1,1,1,1,0],
+                [0,1,1,1,1,1,1,1,1,1,0],
+                [0,0,1,1,1,1,1,1,1,0,0],
+                [0,0,0,1,1,1,1,1,0,0,0]
+            ];
+
+            for (let y = 0; y < palmShape.length; y++) {
+                for (let x = 0; x < palmShape[y].length; x++) {
+                    if (palmShape[y][x]) {
+                        points.push({x: x - 5, y: y + 5, z: 0, char: '█'});
                     }
                 }
             }
 
             // Thumb
-            if (thumbUp) {
-                for (let i = 0; i < 6; i++) {
-                    handPoints.push({x: 1, y: 8 - i, z: 0, char: '|'});
-                }
-                handPoints.push({x: 1, y: 2, z: 0, char: 'O'});
+            if (fingerStates[0]) {
+                let thumbPoints = [
+                    {x: -5, y: 3, z: 0}, {x: -6, y: 2, z: 0}, {x: -7, y: 1, z: 0},
+                    {x: -7, y: 0, z: 0}, {x: -7, y: -1, z: 0}, {x: -6, y: -2, z: 0}
+                ];
+                thumbPoints.forEach(p => points.push({...p, char: '█'}));
             } else {
-                for (let i = 0; i < 4; i++) {
-                    handPoints.push({x: 1 + i, y: 10, z: 0, char: '-'});
-                }
-                handPoints.push({x: 5, y: 10, z: 0, char: 'O'});
+                let thumbPoints = [{x: -5, y: 5, z: 0}, {x: -5, y: 6, z: 0}, {x: -5, y: 7, z: 0}];
+                thumbPoints.forEach(p => points.push({...p, char: '█'}));
             }
 
             // Fingers
-            const fingerX = [3, 4, 5, 6];
-            const fingerNames = ['/', '|', '|', '\\'];
-            
-            fingerX.forEach((fx, idx) => {
-                if (fingers[idx]) {
-                    // Extended
-                    for (let i = 0; i < 8; i++) {
-                        handPoints.push({x: fx, y: 4 - i, z: i * 0.5, char: fingerNames[idx]});
+            let fingerX = [-2, 0, 2, 4];
+            for (let f = 0; f < 4; f++) {
+                let fx = fingerX[f];
+                let extended = fingerStates[f + 1];
+                
+                if (extended) {
+                    for (let i = 0; i < 7; i++) {
+                        points.push({x: fx, y: 0 - i, z: 0, char: '█'});
                     }
-                    handPoints.push({x: fx, y: -4, z: 4, char: 'o'});
+                    // Fingertip
+                    points.push({x: fx, y: -7, z: 0, char: '▀'});
                 } else {
                     // Curled
                     for (let i = 0; i < 3; i++) {
-                        handPoints.push({x: fx, y: 4 - i, z: 0, char: fingerNames[idx]});
+                        points.push({x: fx, y: 2 - i, z: 0, char: '█'});
                     }
-                    handPoints.push({x: fx, y: 1, z: 0, char: 'o'});
-                }
-            });
-
-            // Wrist
-            for (let y = 13; y < 18; y++) {
-                for (let x = 3; x < 7; x++) {
-                    handPoints.push({x, y, z: 0, char: '='});
                 }
             }
 
-            // Rotate and project
-            const projected = handPoints.map(p => {
-                let {x, y, z} = p;
-                x -= 5; y -= 10; // Center
-                
-                const cosY = Math.cos(rotY);
-                const sinY = Math.sin(rotY);
-                let xr = x * cosY - z * sinY;
-                let zr = x * sinY + z * cosY;
-                x = xr; z = zr;
-                
-                const cosX = Math.cos(rotX);
-                const sinX = Math.sin(rotX);
-                let yr = y * cosX - z * sinX;
-                zr = y * sinX + z * cosX;
-                y = yr; z = zr;
-                
-                const perspective = 100 / (100 + z);
-                const px = Math.round(x * perspective * 2) + 40;
-                const py = Math.round(y * perspective) + 25;
-                
-                return {x: px, y: py, z: z, char: p.char};
+            // Wrist
+            for (let y = 14; y < 18; y++) {
+                for (let x = -3; x <= 3; x++) {
+                    points.push({x, y, z: 0, char: '▓'});
+                }
+            }
+
+            // Transform
+            let projected = points.map(p => {
+                let rot = rotate3D(p.x, p.y - 10, p.z, rotX, rotY);
+                let proj = project(rot.x, rot.y, rot.z, 150);
+                return {
+                    x: proj.x + 60,
+                    y: proj.y + 30,
+                    z: proj.z,
+                    char: p.char
+                };
             });
 
             projected.sort((a, b) => a.z - b.z);
 
-            const canvas = Array(50).fill(null).map(() => Array(80).fill(' '));
+            let canvas = Array(60).fill(null).map(() => Array(120).fill(' '));
             projected.forEach(p => {
-                if (p.x >= 0 && p.x < 80 && p.y >= 0 && p.y < 50) {
+                if (p.x >= 0 && p.x < 120 && p.y >= 0 && p.y < 60) {
                     canvas[p.y][p.x] = p.char;
                 }
             });
@@ -287,25 +349,49 @@
         }
 
         function toggleThumb() {
-            thumbUp = !thumbUp;
+            fingerStates[0] = 1 - fingerStates[0];
             updateHand();
         }
 
-        function toggleFinger(idx) {
-            fingers[idx] = !fingers[idx];
+        function setFingers(pose) {
+            switch(pose) {
+                case 'fist':
+                    fingerStates = [0, 0, 0, 0, 0];
+                    break;
+                case 'open':
+                    fingerStates = [1, 1, 1, 1, 1];
+                    break;
+                case 'point':
+                    fingerStates = [1, 1, 0, 0, 0];
+                    break;
+                case 'peace':
+                    fingerStates = [0, 1, 1, 0, 0];
+                    break;
+            }
             updateHand();
         }
 
-        // Plane mouse events
-        const planeEl = document.getElementById('ascii-plane');
+        function addVector() {
+            let i = parseFloat(document.getElementById('vec-i').value);
+            let j = parseFloat(document.getElementById('vec-j').value);
+            let k = parseFloat(document.getElementById('vec-k').value);
+            vectors.push({i, j, k});
+            updatePlane();
+        }
+
+        function clearVectors() {
+            vectors = [];
+            updatePlane();
+        }
+
+        let planeEl = document.getElementById('ascii-plane');
         planeEl.addEventListener('mousedown', (e) => {
             planeDragging = true;
             planeLastX = e.clientX;
             planeLastY = e.clientY;
         });
 
-        // Hand mouse events
-        const handEl = document.getElementById('ascii-hand');
+        let handEl = document.getElementById('ascii-hand');
         handEl.addEventListener('mousedown', (e) => {
             handDragging = true;
             handLastX = e.clientX;
@@ -314,8 +400,8 @@
 
         document.addEventListener('mousemove', (e) => {
             if (planeDragging) {
-                const dx = e.clientX - planeLastX;
-                const dy = e.clientY - planeLastY;
+                let dx = e.clientX - planeLastX;
+                let dy = e.clientY - planeLastY;
                 planeRotY += dx * 0.01;
                 planeRotX += dy * 0.01;
                 planeLastX = e.clientX;
@@ -323,8 +409,8 @@
                 updatePlane();
             }
             if (handDragging) {
-                const dx = e.clientX - handLastX;
-                const dy = e.clientY - handLastY;
+                let dx = e.clientX - handLastX;
+                let dy = e.clientY - handLastY;
                 handRotY += dx * 0.01;
                 handRotX += dy * 0.01;
                 handLastX = e.clientX;
@@ -338,7 +424,6 @@
             handDragging = false;
         });
 
-        // Initial render
         updatePlane();
         updateHand();
     </script>
