@@ -1,76 +1,409 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>3D ASCII Right-Hand Rule</title>
+<title>3D ASCII Hand — interactive (\\ | / - only)</title>
 <style>
-  html,body{
-    margin:0;height:100%;background:#000;color:#0ff;
-    display:flex;align-items:center;justify-content:center;
-    font-family:monospace;overflow:hidden;user-select:none;
-  }
-  canvas{background:#000;}
-  #tip{position:fixed;bottom:10px;left:10px;color:#888;font-size:14px;}
+  :root{--bg:#071226;--fg:#cfe8ff}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:monospace}
+  #app{display:flex;height:100vh;gap:12px;box-sizing:border-box;padding:12px}
+  .view{flex:1;position:relative;border-radius:8px;overflow:hidden;background:#000}
+  canvas{display:block;width:100%;height:100%}
+  .panel{width:360px;background:linear-gradient(180deg,#071226,#071a2a);border-radius:8px;padding:12px;box-sizing:border-box}
+  h1{font-size:16px;margin:0 0 6px}
+  label{font-size:13px;display:block;margin-top:8px}
+  input[type=range]{width:100%}
+  .row{display:flex;gap:8px;align-items:center}
+  button{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--fg);cursor:pointer}
+  .small{font-size:13px;color:#9fb8ff}
+  .tip{position:absolute;left:10px;bottom:10px;background:rgba(0,0,0,0.45);padding:8px;border-radius:6px;font-size:13px}
+  .control-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div id="tip">Drag to rotate • Wheel to zoom</div>
+<div id="app">
+  <div class="view" id="view">
+    <canvas id="c"></canvas>
+    <div class="tip">Drag: rotate • Wheel: zoom • Arrows: rotate</div>
+  </div>
+
+  <div class="panel">
+    <h1>ASCII 3D Hand — controls</h1>
+    <div class="small">Characters used: <code>\ | / -</code></div>
+
+    <label>Global Hand Rotation X (deg)</label>
+    <input id="rotX" type="range" min="-180" max="180" value="0">
+
+    <label>Global Hand Rotation Y (deg)</label>
+    <input id="rotY" type="range" min="-180" max="180" value="0">
+
+    <label>Global Hand Rotation Z (deg)</label>
+    <input id="rotZ" type="range" min="-180" max="180" value="-20">
+
+    <label style="margin-top:12px">Thumb — raise / lower (base rotate) </label>
+    <input id="thumbBase" type="range" min="-90" max="90" value="20">
+
+    <label>Thumb — curl (bend)</label>
+    <input id="thumbCurl" type="range" min="0" max="90" value="20">
+
+    <hr style="opacity:0.06;margin:10px 0">
+
+    <div class="small">Fingers: each has <em>base curl</em> (knuckle) and <em>tip curl</em> (middle+tip)</div>
+
+    <div class="control-grid" style="margin-top:8px">
+      <div>
+        <label>Index base</label>
+        <input id="iBase" type="range" min="0" max="90" value="10">
+        <label>Index tip</label>
+        <input id="iTip" type="range" min="0" max="90" value="6">
+      </div>
+      <div>
+        <label>Middle base</label>
+        <input id="mBase" type="range" min="0" max="90" value="8">
+        <label>Middle tip</label>
+        <input id="mTip" type="range" min="0" max="90" value="5">
+      </div>
+      <div>
+        <label>Ring base</label>
+        <input id="rBase" type="range" min="0" max="90" value="10">
+        <label>Ring tip</label>
+        <input id="rTip" type="range" min="0" max="90" value="8">
+      </div>
+      <div>
+        <label>Little base</label>
+        <input id="lBase" type="range" min="0" max="90" value="12">
+        <label>Little tip</label>
+        <input id="lTip" type="range" min="0" max="90" value="12">
+      </div>
+    </div>
+
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button id="reset">Reset pose</button>
+      <button id="fist">Make fist</button>
+      <button id="open">Open hand</button>
+      <button id="random">Random</button>
+    </div>
+
+    <div style="margin-top:12px;font-size:13px;color:#9fb8ff">
+      Tip: use sliders to adjust pose, then rotate the view to inspect from any angle.
+    </div>
+  </div>
+</div>
+
 <script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
-let w, h;
-function resize(){w=canvas.width=window.innerWidth;h=canvas.height=window.innerHeight;}
-window.addEventListener("resize",resize);resize();
+/* ASCII 3D hand renderer
+   - uses only characters: \ | / -
+   - simple kinematics for palm + thumb + 4 fingers
+*/
 
-// simple 3D transform
-let rotX = 0, rotY = 0, zoom = 1;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', {alpha:false});
+let W = 1, H = 1;
+function resize(){W=canvas.width=canvas.clientWidth;H=canvas.height=canvas.clientHeight; ctx.font='16px monospace';}
+window.addEventListener('resize', resize);
+resize();
 
-function project(x,y,z){
-  const sinX=Math.sin(rotX), cosX=Math.cos(rotX);
-  const sinY=Math.sin(rotY), cosY=Math.cos(rotY);
-  // rotate around Y then X
-  let dx = cosY*x + sinY*z;
-  let dy = sinX*(cosY*z - sinY*x) + cosX*y;
-  let dz = cosX*(cosY*z - sinY*x) - sinX*y;
-  const fov = 300*zoom;
-  const scale = fov / (fov + dz);
-  const sx = w/2 + dx*scale*20;
-  const sy = h/2 - dy*scale*20;
-  return [sx,sy];
+// UI elements
+const ui = {
+  rotX: document.getElementById('rotX'),
+  rotY: document.getElementById('rotY'),
+  rotZ: document.getElementById('rotZ'),
+  thumbBase: document.getElementById('thumbBase'),
+  thumbCurl: document.getElementById('thumbCurl'),
+  iBase: document.getElementById('iBase'), iTip: document.getElementById('iTip'),
+  mBase: document.getElementById('mBase'), mTip: document.getElementById('mTip'),
+  rBase: document.getElementById('rBase'), rTip: document.getElementById('rTip'),
+  lBase: document.getElementById('lBase'), lTip: document.getElementById('lTip'),
+  reset: document.getElementById('reset'), fist: document.getElementById('fist'),
+  open: document.getElementById('open'), random: document.getElementById('random')
+};
+
+// basic 3D utilities
+function deg(d){return d*Math.PI/180;}
+function matMulVec(m, v){ // 3x3 * vec3
+  return [
+    m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
+    m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
+    m[6]*v[0] + m[7]*v[1] + m[8]*v[2],
+  ];
+}
+function rotMatrix(ax,ay,az){
+  const sx=Math.sin(ax), cx=Math.cos(ax);
+  const sy=Math.sin(ay), cy=Math.cos(ay);
+  const sz=Math.sin(az), cz=Math.cos(az);
+  // Rz * Ry * Rx
+  return [
+    cz*cy, cz*sy*sx - sz*cx, cz*sy*cx + sz*sx,
+    sz*cy, sz*sy*sx + cz*cx, sz*sy*cx - cz*sx,
+    -sy,   cy*sx,            cy*cx
+  ];
 }
 
-function draw(){
-  ctx.fillStyle="#000";ctx.fillRect(0,0,w,h);
-  ctx.font="16px monospace";ctx.textAlign="center";ctx.textBaseline="middle";
-  // axes
-  for(let i=-10;i<=10;i++){
-    let [x1,y1]=project(i,0,0);
-    ctx.fillStyle="#f55";ctx.fillText("-",x1,y1);
-    [x1,y1]=project(0,i,0);
-    ctx.fillStyle="#5f5";ctx.fillText("|",x1,y1);
-    [x1,y1]=project(0,0,i);
-    ctx.fillStyle="#55f";ctx.fillText(i>=0?"/":"\\",x1,y1);
+// projection
+let zoom = 1;
+function project(v){
+  // world -> view: v is [x,y,z]
+  // simple perspective where camera is centered looking toward -z
+  const f = 400*zoom;
+  const x = W/2 + v[0]*f/(f + v[2]);
+  const y = H/2 - v[1]*f/(f + v[2]);
+  return [x,y];
+}
+
+// choose ASCII char by projected local 2D direction
+function chooseChar(dx, dy){
+  // determine dominant direction angle
+  const ang = Math.atan2(dy, dx);
+  const degA = ang * 180/Math.PI;
+  // map to four chars
+  // Right/Left -> '-' ; Up/Down -> '|' ; diag positive -> '/' ; diag negative -> '\'
+  const a = ((degA%360)+360)%360;
+  if (a >= 337.5 || a < 22.5) return '-';
+  if (a >= 22.5 && a < 67.5) return '/';
+  if (a >= 67.5 && a < 112.5) return '|';
+  if (a >= 112.5 && a < 157.5) return '\\';
+  if (a >= 157.5 && a < 202.5) return '-';
+  if (a >= 202.5 && a < 247.5) return '/';
+  if (a >= 247.5 && a < 292.5) return '|';
+  return '\\';
+}
+
+// hand model (local coordinates)
+// palm at origin, palm plane roughly xy, z coming out (toward viewer when positive)
+const palm = {
+  width: 6, // x spread
+  length: 5, // y extent toward fingers
+  thickness: 1
+};
+
+// finger templates: each finger: array of segment lengths in local units
+const fingerTemplate = {
+  index: [1.8, 1.5, 1.2],
+  middle: [2.0, 1.6, 1.4],
+  ring: [1.9, 1.5, 1.3],
+  little: [1.4, 1.1, 0.9],
+  thumb: [1.4, 1.0] // two segments (base + tip)
+};
+
+// finger base positions relative to palm center
+const bases = {
+  index: [1.8, palm.length, 0.0],
+  middle: [0.6, palm.length, 0.0],
+  ring: [-0.6, palm.length, 0.0],
+  little: [-1.9, palm.length - 0.2, 0.0],
+  thumb: [2.3, 0.6, -0.8] // thumb off to side and slightly behind
+};
+
+function getPose(){
+  return {
+    thumbBase: Number(ui.thumbBase.value),
+    thumbCurl: Number(ui.thumbCurl.value),
+    iBase: Number(ui.iBase.value), iTip: Number(ui.iTip.value),
+    mBase: Number(ui.mBase.value), mTip: Number(ui.mTip.value),
+    rBase: Number(ui.rBase.value), rTip: Number(ui.rTip.value),
+    lBase: Number(ui.lBase.value), lTip: Number(ui.lTip.value),
+    rotX: Number(ui.rotX.value), rotY: Number(ui.rotY.value), rotZ: Number(ui.rotZ.value)
+  };
+}
+
+// compute finger joint positions in local palm space
+function buildFinger(basePos, template, baseCurlDeg, tipCurlDeg, fingerYawDeg=0){
+  // baseCurl bends in -X direction (toward palm normal) and rotates in z by yaw (spread)
+  const pts = [];
+  let p = [basePos[0], basePos[1], basePos[2]]; // start at base
+  let dir = [0,1,0]; // default finger points toward +Y in palm-local coords
+  // apply finger yaw (spread) rotation around Z
+  const yaw = deg(fingerYawDeg);
+  const Ry = [Math.cos(yaw), -Math.sin(yaw), 0, Math.sin(yaw), Math.cos(yaw), 0, 0,0,1];
+  dir = matMulVec(Ry, dir);
+  pts.push(p.slice());
+  // base bend rotates around X axis (curling down) by baseCurlDeg
+  let angleBase = -deg(baseCurlDeg);
+  // for each segment
+  for(let i=0;i<template.length;i++){
+    // rotate dir by base/tip depending
+    const segLen = template[i];
+    let ang = (i===0?angleBase:-deg(tipCurlDeg)); // first segment base angle, others tip angle (simplified)
+    // rotation around X (curl) in palm-local coordinates relative to current orientation
+    const c = Math.cos(ang), s = Math.sin(ang);
+    // build Rx for rotation around X of the finger's local frame
+    const Rx = [1,0,0, 0,c,-s, 0,s,c];
+    // rotate dir by Rx
+    dir = matMulVec(Rx, dir);
+    // move p forward by dir * segLen
+    p = [p[0] + dir[0]*segLen, p[1] + dir[1]*segLen, p[2] + dir[2]*segLen];
+    pts.push(p.slice());
+    // for subsequent segments, reduce curl a bit to create a curl gradient
+    angleBase *= 0.6;
+    tipCurlDeg *= 0.75;
   }
-  requestAnimationFrame(draw);
+  return pts;
 }
-draw();
 
-// mouse controls
-let dragging=false,lastX=0,lastY=0;
-canvas.addEventListener("mousedown",e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
-window.addEventListener("mouseup",()=>dragging=false);
-canvas.addEventListener("mousemove",e=>{
-  if(!dragging)return;
-  rotY += (e.clientX-lastX)*0.01;
-  rotX += (e.clientY-lastY)*0.01;
-  lastX=e.clientX;lastY=e.clientY;
+// main draw function
+function draw(){
+  resize();
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const pose = getPose();
+
+  // global rotation matrix (convert degrees to radians)
+  const R = rotMatrix(deg(pose.rotX), deg(pose.rotY), deg(pose.rotZ));
+
+  // helper draw segment (draw many small steps represented with ascii chars)
+  function drawSegment(a,b, color='#cfe8ff'){
+    // a,b are 3d coords in palm-local; transform by R then project
+    const ta = matMulVec(R, a);
+    const tb = matMulVec(R, b);
+    // choose number of steps based on distance
+    const dx = tb[0]-ta[0], dy = tb[1]-ta[1], dz = tb[2]-ta[2];
+    const dist = Math.hypot(dx,dy,dz);
+    const steps = Math.max(1, Math.round(dist*10));
+    let prev2d = null;
+    for(let i=0;i<=steps;i++){
+      const t = i/steps;
+      const p = [ta[0] + dx*t, ta[1] + dy*t, ta[2] + dz*t + 6]; // offset z (bring forward)
+      const [sx,sy] = project(p);
+      if(prev2d){
+        const ch = chooseChar(sx - prev2d[0], sy - prev2d[1]);
+        ctx.fillStyle = color;
+        ctx.fillText(ch, sx, sy);
+      } else {
+        // draw a small origin mark with '-' (still allowed)
+        ctx.fillStyle = color;
+        ctx.fillText('-', sx, sy);
+      }
+      prev2d = [sx,sy];
+    }
+  }
+
+  // draw palm as a small grid of characters (approx)
+  const palmPoints = [];
+  const pw = palm.width, pl = palm.length;
+  for(let ix=-2; ix<=2; ix++){
+    for(let iy=-1; iy<=1; iy++){
+      const px = (ix / 2) * pw * 0.4;
+      const py = (iy / 1) * pl * 0.6;
+      const pz = 0;
+      palmPoints.push([px,py,pz]);
+    }
+  }
+  for(const p of palmPoints){
+    const tp = matMulVec(R, p);
+    const [sx,sy] = project([tp[0],tp[1],tp[2]+6]);
+    ctx.fillStyle = '#7fb8ff';
+    ctx.fillText('|', sx, sy);
+  }
+
+  // fingers: compute and render
+  // finger spreads (small yaw degrees) to fan them naturally
+  const spreads = { index: 8, middle: 2, ring: -6, little: -16 };
+
+  // index
+  const iPts = buildFinger(bases.index, fingerTemplate.index, pose.iBase, pose.iTip, spreads.index);
+  for(let k=0;k<iPts.length-1;k++) drawSegment(iPts[k], iPts[k+1], '#ffd7d7');
+
+  const mPts = buildFinger(bases.middle, fingerTemplate.middle, pose.mBase, pose.mTip, spreads.middle);
+  for(let k=0;k<mPts.length-1;k++) drawSegment(mPts[k], mPts[k+1], '#ffd7d7');
+
+  const rPts = buildFinger(bases.ring, fingerTemplate.ring, pose.rBase, pose.rTip, spreads.ring);
+  for(let k=0;k<rPts.length-1;k++) drawSegment(rPts[k], rPts[k+1], '#ffd7d7');
+
+  const lPts = buildFinger(bases.little, fingerTemplate.little, pose.lBase, pose.lTip, spreads.little);
+  for(let k=0;k<lPts.length-1;k++) drawSegment(lPts[k], lPts[k+1], '#ffd7d7');
+
+  // thumb: more complex - base rotates around Z (yaw) and then curls
+  // We'll rotate the thumb base outward by thumbBase deg (lifting) around Z axis centered at base
+  // and then apply curl for segments
+  const tb = pose.thumbBase; const tcurl = pose.thumbCurl;
+  // build a local thumb transform: rotate around local Z (lift) then generate segments along local +X direction
+  // hack: reuse buildFinger but with a rotated baseline: rotate by -45 deg yaw so thumb points roughly -X/+Y
+  const thumbYaw = -42;
+  const thumbPts = buildFinger(bases.thumb, fingerTemplate.thumb, tb, tcurl, thumbYaw);
+  for(let k=0;k<thumbPts.length-1;k++) drawSegment(thumbPts[k], thumbPts[k+1], '#d8ffd7');
+
+  // draw joints as small markers using allowed chars
+  function drawJoint(p, color='#a0d8ff'){
+    const tp = matMulVec(R, p);
+    const [sx,sy] = project([tp[0],tp[1],tp[2]+6]);
+    ctx.fillStyle = color;
+    ctx.fillText('-', sx, sy);
+  }
+  // draw a center origin
+  drawJoint([0,0,0],'#9fb8ff');
+}
+
+// animation loop
+(function loop(){
+  draw();
+  requestAnimationFrame(loop);
+})();
+
+// interactions: mouse rotate and wheel zoom
+let dragging=false, lastX=0, lastY=0;
+canvas.addEventListener('mousedown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; });
+window.addEventListener('mouseup', ()=>dragging=false);
+canvas.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  // modify global rotation sliders (so UI stays in sync)
+  ui.rotY.value = Number(ui.rotY.value) + dx*0.25;
+  ui.rotX.value = Number(ui.rotX.value) + dy*0.25;
 });
-canvas.addEventListener("wheel",e=>{
+canvas.addEventListener('wheel', e=>{
   e.preventDefault();
   zoom *= (e.deltaY>0)?0.9:1.1;
 },{passive:false});
+
+// keyboard arrow rotation
+window.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft') ui.rotY.value = Number(ui.rotY.value) - 4;
+  if(e.key==='ArrowRight') ui.rotY.value = Number(ui.rotY.value) + 4;
+  if(e.key==='ArrowUp') ui.rotX.value = Number(ui.rotX.value) - 4;
+  if(e.key==='ArrowDown') ui.rotX.value = Number(ui.rotX.value) + 4;
+});
+
+// button actions
+ui.reset.addEventListener('click', ()=>{
+  ui.thumbBase.value = 20; ui.thumbCurl.value = 20;
+  ui.iBase.value=10; ui.iTip.value=6;
+  ui.mBase.value=8; ui.mTip.value=5;
+  ui.rBase.value=10; ui.rTip.value=8;
+  ui.lBase.value=12; ui.lTip.value=12;
+  ui.rotX.value=0; ui.rotY.value=0; ui.rotZ.value=-20;
+});
+ui.fist.addEventListener('click', ()=>{
+  ui.thumbBase.value = 10; ui.thumbCurl.value = 40;
+  ui.iBase.value=80; ui.iTip.value=75;
+  ui.mBase.value=80; ui.mTip.value=75;
+  ui.rBase.value=80; ui.rTip.value=75;
+  ui.lBase.value=80; ui.lTip.value=75;
+});
+ui.open.addEventListener('click', ()=>{
+  ui.thumbBase.value = 40; ui.thumbCurl.value = 0;
+  ui.iBase.value=0; ui.iTip.value=0;
+  ui.mBase.value=0; ui.mTip.value=0;
+  ui.rBase.value=0; ui.rTip.value=0;
+  ui.lBase.value=0; ui.lTip.value=0;
+});
+ui.random.addEventListener('click', ()=>{
+  ui.thumbBase.value = Math.round((Math.random()*100)-50);
+  ui.thumbCurl.value = Math.round(Math.random()*60);
+  ui.iBase.value = Math.round(Math.random()*90);
+  ui.iTip.value = Math.round(Math.random()*80);
+  ui.mBase.value = Math.round(Math.random()*90);
+  ui.mTip.value = Math.round(Math.random()*80);
+  ui.rBase.value = Math.round(Math.random()*90);
+  ui.rTip.value = Math.round(Math.random()*80);
+  ui.lBase.value = Math.round(Math.random()*90);
+  ui.lTip.value = Math.round(Math.random()*80);
+});
+
+// initial pose
+ui.reset.click();
+
 </script>
 </body>
 </html>
