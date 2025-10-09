@@ -145,7 +145,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/FBXLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.0/umd/index.js"></script>
 
   <script>
     // ================== COORDINATE PLANE ==================
@@ -212,25 +213,106 @@
     handScene.add(dirLight);
 
     let handModel, mixer, actions = {};
-    const loader = new THREE.GLTFLoader();
+    const loader = new THREE.FBXLoader();
 
-    // ✅ Using a lightweight, rigged right-hand GLB model
+    // ✅ Using FBX hand model with bone structure
+    // Load from local file - place your FBX file in the same directory as this HTML file
     loader.load(
-      "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/AnimatedHand/glTF-Binary/AnimatedHand.glb",
-      (gltf) => {
-        handModel = gltf.scene;
-        handModel.scale.set(5, 5, 5);
-        handScene.add(handModel);
-        mixer = new THREE.AnimationMixer(handModel);
-
-        // Store animation clips for later control (optional)
-        gltf.animations.forEach((clip) => {
-          actions[clip.name] = mixer.clipAction(clip);
+      "./hand.fbx", // Change this to match your FBX filename
+      (fbx) => {
+        handModel = fbx;
+        handModel.scale.set(0.1, 0.1, 0.1); // Adjust scale as needed
+        handModel.position.set(0, -5, 0); // Adjust position as needed
+        
+        // Add basic material if needed
+        handModel.traverse((child) => {
+          if (child.isMesh) {
+            child.material = new THREE.MeshPhongMaterial({ 
+              color: 0xffdbac, 
+              skinning: true 
+            });
+          }
         });
+        
+        handScene.add(handModel);
+        
+        // Setup animation mixer if FBX has animations
+        if (fbx.animations && fbx.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(handModel);
+          fbx.animations.forEach((clip) => {
+            actions[clip.name] = mixer.clipAction(clip);
+          });
+        }
+        
+        console.log("Hand model loaded successfully");
+        console.log("Bones found:", getBoneNames());
       },
-      undefined,
-      (err) => console.error("Failed to load hand model", err)
+      (progress) => {
+        console.log("Loading: " + (progress.loaded / progress.total * 100) + "%");
+      },
+      (err) => {
+        console.error("Failed to load hand model", err);
+        console.log("Creating fallback hand geometry...");
+        createFallbackHand();
+      }
     );
+
+    // Fallback hand creation if FBX fails to load
+    function createFallbackHand() {
+      const handGroup = new THREE.Group();
+      
+      // Palm
+      const palm = new THREE.Mesh(
+        new THREE.BoxGeometry(4, 5, 1),
+        new THREE.MeshPhongMaterial({ color: 0xffdbac })
+      );
+      handGroup.add(palm);
+      
+      // Create fingers
+      const fingers = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+      const fingerPositions = [
+        { x: -2, y: 2, angle: 0.5 },
+        { x: -1.5, y: 3, angle: 0 },
+        { x: 0, y: 3.5, angle: 0 },
+        { x: 1.5, y: 3, angle: 0 },
+        { x: 2.5, y: 2, angle: 0 }
+      ];
+      
+      fingers.forEach((name, i) => {
+        const pos = fingerPositions[i];
+        const finger = new THREE.Group();
+        finger.name = name;
+        
+        for (let j = 0; j < 3; j++) {
+          const segment = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.3, 0.3, 1.5, 8),
+            new THREE.MeshPhongMaterial({ color: 0xffdbac })
+          );
+          segment.position.y = j * 1.5;
+          segment.name = `${name}_${j}`;
+          finger.add(segment);
+        }
+        
+        finger.position.set(pos.x, pos.y, 0);
+        finger.rotation.z = pos.angle;
+        handGroup.add(finger);
+      });
+      
+      handModel = handGroup;
+      handModel.scale.set(1.5, 1.5, 1.5);
+      handScene.add(handModel);
+    }
+
+    // Helper function to get bone names
+    function getBoneNames() {
+      const bones = [];
+      if (handModel) {
+        handModel.traverse((obj) => {
+          if (obj.isBone) bones.push(obj.name);
+        });
+      }
+      return bones;
+    }
 
     let fingerStates = { thumb: 1, index: 1, middle: 1, ring: 1, pinky: 1 };
 
@@ -249,15 +331,55 @@
 
     function animateHandPose() {
       if (!handModel) return;
+      
+      // For FBX models with proper bone structure
       handModel.traverse((bone) => {
         if (bone.isBone) {
-          if (bone.name.includes("thumb")) bone.rotation.x = fingerStates.thumb ? 0 : -0.6;
-          if (bone.name.includes("index")) bone.rotation.x = fingerStates.index ? 0 : -0.9;
-          if (bone.name.includes("middle")) bone.rotation.x = fingerStates.middle ? 0 : -0.9;
-          if (bone.name.includes("ring")) bone.rotation.x = fingerStates.ring ? 0 : -0.9;
-          if (bone.name.includes("pinky")) bone.rotation.x = fingerStates.pinky ? 0 : -0.9;
+          const name = bone.name.toLowerCase();
+          
+          // Thumb control
+          if (name.includes("thumb")) {
+            bone.rotation.z = fingerStates.thumb ? 0 : -0.8;
+          }
+          // Index finger control
+          if (name.includes("index")) {
+            bone.rotation.z = fingerStates.index ? 0 : -1.2;
+          }
+          // Middle finger control
+          if (name.includes("middle")) {
+            bone.rotation.z = fingerStates.middle ? 0 : -1.2;
+          }
+          // Ring finger control
+          if (name.includes("ring")) {
+            bone.rotation.z = fingerStates.ring ? 0 : -1.2;
+          }
+          // Pinky finger control
+          if (name.includes("pinky") || name.includes("little")) {
+            bone.rotation.z = fingerStates.pinky ? 0 : -1.2;
+          }
         }
       });
+      
+      // For fallback geometry hand
+      if (handModel && !handModel.traverse) {
+        handModel.children.forEach((child) => {
+          if (child.name === 'thumb') {
+            child.rotation.x = fingerStates.thumb ? 0 : -0.6;
+          }
+          if (child.name === 'index') {
+            child.rotation.x = fingerStates.index ? 0 : -0.9;
+          }
+          if (child.name === 'middle') {
+            child.rotation.x = fingerStates.middle ? 0 : -0.9;
+          }
+          if (child.name === 'ring') {
+            child.rotation.x = fingerStates.ring ? 0 : -0.9;
+          }
+          if (child.name === 'pinky') {
+            child.rotation.x = fingerStates.pinky ? 0 : -0.9;
+          }
+        });
+      }
     }
 
     function resetHandView() {
