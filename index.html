@@ -1,576 +1,154 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>True 3D Interactive Visualization</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background: #0a0a0a;
-            color: #00ff00;
-            font-family: 'Courier New', monospace;
-            overflow: hidden;
-        }
-        #container {
-            display: flex;
-            width: 100vw;
-            height: 100vh;
-        }
-        .canvas-container {
-            flex: 1;
-            position: relative;
-        }
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-        .controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            font-size: 11px;
-            color: #00ff00;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #00ff00;
-            z-index: 10;
-        }
-        .bottom-controls {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            font-size: 11px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #00ff00;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        .vector-controls {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            font-size: 11px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #00ff00;
-            width: 200px;
-        }
-        button {
-            background: #003300;
-            color: #00ff00;
-            border: 1px solid #00ff00;
-            padding: 5px 10px;
-            margin: 2px;
-            cursor: pointer;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-        }
-        button:hover {
-            background: #005500;
-        }
-        button:disabled {
-            background: #001100;
-            color: #003300;
-            cursor: not-allowed;
-        }
-        h3 {
-            margin: 0 0 10px 0;
-            font-size: 13px;
-        }
-        input[type="number"], input[type="range"] {
-            width: 50px;
-            background: #001100;
-            color: #00ff00;
-            border: 1px solid #00ff00;
-            padding: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            border-radius: 3px;
-        }
-        input[type="range"] {
-            width: 120px;
-        }
-        label {
-            font-size: 10px;
-            margin-right: 5px;
-        }
-        .input-group {
-            margin: 5px 0;
-        }
-        .status {
-            color: #ffff00;
-            font-size: 10px;
-            margin-top: 5px;
-        }
-        .finger-control {
-            margin: 8px 0;
-            padding: 5px;
-            border: 1px solid #003300;
-            border-radius: 3px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>3D Hand Orientation Control</title>
+  <style>
+    body { margin: 0; background: #111; overflow: hidden; }
+    canvas { display: block; }
+  </style>
 </head>
 <body>
-    <div id="container">
-        <div class="canvas-container">
-            <div class="controls">
-                <h3>XYZ COORDINATE PLANE</h3>
-                Drag to rotate<br>
-                Scroll to zoom
-            </div>
-            <div class="vector-controls">
-                <h3>VECTORS</h3>
-                <div class="input-group">
-                    <label>i:</label><input type="number" id="vec-i" value="5" step="1">
-                    <label>j:</label><input type="number" id="vec-j" value="5" step="1">
-                </div>
-                <div class="input-group">
-                    <label>k:</label><input type="number" id="vec-k" value="5" step="1">
-                </div>
-                <button onclick="addVector()">Add Vector</button>
-                <button onclick="clearVectors()">Clear All</button>
-                <button onclick="resetPlaneView()">Reset View</button>
-            </div>
-            <canvas id="plane-canvas"></canvas>
-        </div>
-        
-        <div class="canvas-container">
-            <div class="controls">
-                <h3>3D HAND MODEL</h3>
-                Drag to rotate<br>
-                Scroll to zoom
-                <div class="status" id="load-status">Loading model...</div>
-            </div>
-            <div class="bottom-controls">
-                <h3>ROTATION MODE</h3>
-                <button id="camera-mode" onclick="toggleRotationMode()" style="background: #005500;">Camera (Active)</button><br>
-                
-                <h3>QUICK POSES</h3>
-                <button onclick="setPose('open')" id="btn-open">Open Hand</button>
-                <button onclick="setPose('fist')" id="btn-fist">Fist</button><br>
-                <button onclick="setPose('point')" id="btn-point">Point</button>
-                <button onclick="setPose('peace')" id="btn-peace">Peace</button><br>
-                <button onclick="setPose('thumbsup')" id="btn-thumbsup">Thumbs Up</button>
-                <button onclick="setPose('ok')" id="btn-ok">OK Sign</button><br>
-                
-                <h3>INDIVIDUAL FINGERS</h3>
-                <div class="finger-control">
-                    <label>Thumb:</label><br>
-                    <input type="range" id="thumb-slider" min="0" max="1" step="0.01" value="1" disabled>
-                    <button onclick="toggleFinger(0)" id="btn-thumb" disabled>Toggle</button>
-                </div>
-                <div class="finger-control">
-                    <label>Index:</label><br>
-                    <input type="range" id="index-slider" min="0" max="1" step="0.01" value="1" disabled>
-                    <button onclick="toggleFinger(1)" id="btn-index" disabled>Toggle</button>
-                </div>
-                <div class="finger-control">
-                    <label>Middle:</label><br>
-                    <input type="range" id="middle-slider" min="0" max="1" step="0.01" value="1" disabled>
-                    <button onclick="toggleFinger(2)" id="btn-middle" disabled>Toggle</button>
-                </div>
-                <div class="finger-control">
-                    <label>Ring:</label><br>
-                    <input type="range" id="ring-slider" min="0" max="1" step="0.01" value="1" disabled>
-                    <button onclick="toggleFinger(3)" id="btn-ring" disabled>Toggle</button>
-                </div>
-                <div class="finger-control">
-                    <label>Pinky:</label><br>
-                    <input type="range" id="pinky-slider" min="0" max="1" step="0.01" value="1" disabled>
-                    <button onclick="toggleFinger(4)" id="btn-pinky" disabled>Toggle</button>
-                </div>
-                
-                <button onclick="resetHandView()">Reset View</button>
-            </div>
-            <canvas id="hand-canvas"></canvas>
-        </div>
-    </div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
-    <script>
-        // PLANE SCENE (unchanged)
-        const planeCanvas = document.getElementById('plane-canvas');
-        const planeScene = new THREE.Scene();
-        planeScene.background = new THREE.Color(0x0a0a0a);
-        const planeCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-        const planeRenderer = new THREE.WebGLRenderer({canvas: planeCanvas, antialias: true});
-        
-        planeCamera.position.set(15, 15, 15);
-        planeCamera.lookAt(0, 0, 0);
+  <script>
+    // === Basic Scene Setup ===
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111111);
 
-        // Axes
-        const axisLength = 15;
-        const xAxis = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(-axisLength, 0, 0),
-            new THREE.Vector3(axisLength, 0, 0)
-        ]);
-        const xLine = new THREE.Line(xAxis, new THREE.LineBasicMaterial({color: 0xff0000, linewidth: 2}));
-        planeScene.add(xLine);
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(3, 3, 5);
 
-        const yAxis = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, -axisLength, 0),
-            new THREE.Vector3(0, axisLength, 0)
-        ]);
-        const yLine = new THREE.Line(yAxis, new THREE.LineBasicMaterial({color: 0x00ff00, linewidth: 2}));
-        planeScene.add(yLine);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-        const zAxis = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, 0, -axisLength),
-            new THREE.Vector3(0, 0, axisLength)
-        ]);
-        const zLine = new THREE.Line(zAxis, new THREE.LineBasicMaterial({color: 0x0000ff, linewidth: 2}));
-        planeScene.add(zLine);
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
 
-        // Grid
-        const gridHelper = new THREE.GridHelper(30, 30, 0x004400, 0x002200);
-        planeScene.add(gridHelper);
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 5);
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0x404040));
 
-        // Origin marker
-        const originGeom = new THREE.SphereGeometry(0.3, 16, 16);
-        const originMat = new THREE.MeshBasicMaterial({color: 0xffff00});
-        const originMesh = new THREE.Mesh(originGeom, originMat);
-        planeScene.add(originMesh);
+    // === Coordinate Axes ===
+    const axesHelper = new THREE.AxesHelper(3);
+    scene.add(axesHelper);
 
-        // Vector group
-        const vectorGroup = new THREE.Group();
-        planeScene.add(vectorGroup);
+    // === Hand Placeholder Geometry ===
+    // Simple abstract hand: box for palm + cylinders for fingers + small thumb
+    const handGroup = new THREE.Group();
 
-        let vectors = [];
+    const palmGeometry = new THREE.BoxGeometry(1, 0.2, 1.2);
+    const palmMaterial = new THREE.MeshStandardMaterial({ color: 0x00aaff, metalness: 0.3, roughness: 0.7 });
+    const palmMesh = new THREE.Mesh(palmGeometry, palmMaterial);
+    palmMesh.position.set(0, 0, 0);
+    handGroup.add(palmMesh);
 
-        function addVector() {
-            const i = parseFloat(document.getElementById('vec-i').value);
-            const j = parseFloat(document.getElementById('vec-j').value);
-            const k = parseFloat(document.getElementById('vec-k').value);
-            
-            const dir = new THREE.Vector3(i, j, k);
-            const length = dir.length();
-            const arrowHelper = new THREE.ArrowHelper(
-                dir.normalize(),
-                new THREE.Vector3(0, 0, 0),
-                length,
-                0xff00ff,
-                length * 0.2,
-                length * 0.1
-            );
-            vectorGroup.add(arrowHelper);
-            vectors.push(arrowHelper);
-        }
+    const fingerMaterial = new THREE.MeshStandardMaterial({ color: 0x55ccff });
+    const fingerGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.7, 16);
 
-        function clearVectors() {
-            while(vectorGroup.children.length > 0) {
-                vectorGroup.remove(vectorGroup.children[0]);
-            }
-            vectors = [];
-        }
+    const fingerPositions = [-0.4, -0.2, 0, 0.2, 0.4];
+    const fingersGroup = new THREE.Group();
+    for (let i = 0; i < 5; i++) {
+      const f = new THREE.Mesh(fingerGeo, fingerMaterial);
+      f.rotation.x = Math.PI / 2;
+      f.position.set(fingerPositions[i], 0.25, 0.6);
+      fingersGroup.add(f);
+    }
+    handGroup.add(fingersGroup);
 
-        function resetPlaneView() {
-            planeCamera.position.set(15, 15, 15);
-            planeCamera.lookAt(0, 0, 0);
-        }
+    const thumb = new THREE.Mesh(fingerGeo, new THREE.MeshStandardMaterial({ color: 0xff8855 }));
+    thumb.rotation.z = Math.PI / 3;
+    thumb.position.set(-0.65, 0, 0.2);
+    handGroup.add(thumb);
 
-        // HAND SCENE with FBX Loading
-        const handCanvas = document.getElementById('hand-canvas');
-        const handScene = new THREE.Scene();
-        handScene.background = new THREE.Color(0x0a0a0a);
-        const handCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-        const handRenderer = new THREE.WebGLRenderer({canvas: handCanvas, antialias: true});
-        
-        handCamera.position.set(0, 0, 25);
-        handCamera.lookAt(0, 0, 0);
+    scene.add(handGroup);
 
-        const handLight = new THREE.DirectionalLight(0xffffff, 1);
-        handLight.position.set(5, 5, 5);
-        handScene.add(handLight);
-        handScene.add(new THREE.AmbientLight(0x606060));
+    // Palm faces upwards (parallel to fingers)
+    handGroup.rotation.x = -Math.PI / 2;
 
-        let handModel = null;
-        let handBones = {};
-        let fingerStates = [1, 1, 1, 1, 1]; // thumb, index, middle, ring, pinky (0=curled, 1=extended)
-        let modelLoaded = false;
+    // === Vector Controls ===
+    const handOrientation = {
+      fingerVector: new THREE.Vector3(1, 0, 0),
+      thumbVector: new THREE.Vector3(0, 1, 0),
+      palmVector: new THREE.Vector3(0, 0, 1),
+      fingerVectorName: 'Finger Vector',
+      thumbVectorName: 'Thumb Vector',
+      palmVectorName: 'Palm Vector'
+    };
 
-        // Load FBX model
-        const loader = new THREE.FBXLoader();
-        loader.load(
-            'righthand.fbx',
-            function(object) {
-                handModel = object;
-                
-                // Scale and position the model
-                handModel.scale.set(0.1, 0.1, 0.1);
-                handModel.position.set(0, 0, 0);
-                
-                // Apply green material
-                handModel.traverse(function(child) {
-                    if (child.isMesh) {
-                        child.material = new THREE.MeshPhongMaterial({
-                            color: 0x00ff88,
-                            shininess: 30
-                        });
-                    }
-                });
-                
-                // Find bones (common naming patterns)
-                handModel.traverse(function(bone) {
-                    if (bone.isBone || bone.type === 'Bone') {
-                        const name = bone.name.toLowerCase();
-                        
-                        // Thumb bones
-                        if (name.includes('thumb')) {
-                            if (!handBones.thumb) handBones.thumb = [];
-                            handBones.thumb.push(bone);
-                        }
-                        // Index finger
-                        else if (name.includes('index')) {
-                            if (!handBones.index) handBones.index = [];
-                            handBones.index.push(bone);
-                        }
-                        // Middle finger
-                        else if (name.includes('middle')) {
-                            if (!handBones.middle) handBones.middle = [];
-                            handBones.middle.push(bone);
-                        }
-                        // Ring finger
-                        else if (name.includes('ring')) {
-                            if (!handBones.ring) handBones.ring = [];
-                            handBones.ring.push(bone);
-                        }
-                        // Pinky finger
-                        else if (name.includes('pinky') || name.includes('little')) {
-                            if (!handBones.pinky) handBones.pinky = [];
-                            handBones.pinky.push(bone);
-                        }
-                    }
-                });
-                
-                handScene.add(handModel);
-                modelLoaded = true;
-                document.getElementById('load-status').textContent = 'Model loaded!';
-                document.getElementById('load-status').style.color = '#00ff00';
-                
-                // Enable controls
-                enableControls();
-                
-                console.log('Hand bones found:', handBones);
-            },
-            function(xhr) {
-                const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
-                document.getElementById('load-status').textContent = `Loading: ${percent}%`;
-            },
-            function(error) {
-                console.error('Error loading FBX:', error);
-                document.getElementById('load-status').textContent = 'Error loading model';
-                document.getElementById('load-status').style.color = '#ff0000';
-            }
-        );
+    // === GUI Setup ===
+    const gui = new dat.GUI({ width: 180 });
+    const orientationFolder = gui.addFolder('Orientation Vectors');
+    orientationFolder.add(handOrientation, 'fingerVectorName').name('Finger Name');
+    orientationFolder.add(handOrientation, 'thumbVectorName').name('Thumb Name');
+    orientationFolder.add(handOrientation, 'palmVectorName').name('Palm Name');
 
-        function enableControls() {
-            const controls = ['thumb', 'index', 'middle', 'ring', 'pinky', 'open', 'fist', 'point', 'peace', 'thumbsup', 'ok'];
-            controls.forEach(id => {
-                const btn = document.getElementById(`btn-${id}`);
-                if (btn) btn.disabled = false;
-            });
-            
-            const sliders = ['thumb', 'index', 'middle', 'ring', 'pinky'];
-            sliders.forEach(id => {
-                const slider = document.getElementById(`${id}-slider`);
-                if (slider) {
-                    slider.disabled = false;
-                    slider.addEventListener('input', function() {
-                        const fingerIndex = sliders.indexOf(id);
-                        fingerStates[fingerIndex] = parseFloat(this.value);
-                        updateHandPose();
-                    });
-                }
-            });
-        }
+    const fingerFolder = orientationFolder.addFolder('Finger Dir');
+    fingerFolder.add(handOrientation.fingerVector, 'x', -1, 1, 0.1);
+    fingerFolder.add(handOrientation.fingerVector, 'y', -1, 1, 0.1);
+    fingerFolder.add(handOrientation.fingerVector, 'z', -1, 1, 0.1);
 
-        function updateHandPose() {
-            if (!modelLoaded || !handModel) return;
-            
-            const fingerNames = ['thumb', 'index', 'middle', 'ring', 'pinky'];
-            
-            fingerNames.forEach((name, index) => {
-                const bones = handBones[name];
-                if (bones && bones.length > 0) {
-                    const curlAmount = 1 - fingerStates[index]; // 0 = extended, 1 = curled
-                    
-                    bones.forEach((bone, boneIndex) => {
-                        // Apply rotation based on curl amount
-                        // Adjust these values based on your FBX model's bone structure
-                        if (name === 'thumb') {
-                            bone.rotation.z = curlAmount * Math.PI / 3;
-                        } else {
-                            bone.rotation.z = curlAmount * Math.PI / 2;
-                        }
-                    });
-                }
-            });
-        }
+    const thumbFolder = orientationFolder.addFolder('Thumb Dir');
+    thumbFolder.add(handOrientation.thumbVector, 'x', -1, 1, 0.1);
+    thumbFolder.add(handOrientation.thumbVector, 'y', -1, 1, 0.1);
+    thumbFolder.add(handOrientation.thumbVector, 'z', -1, 1, 0.1);
 
-        function toggleFinger(fingerIndex) {
-            fingerStates[fingerIndex] = 1 - fingerStates[fingerIndex];
-            const sliderIds = ['thumb-slider', 'index-slider', 'middle-slider', 'ring-slider', 'pinky-slider'];
-            document.getElementById(sliderIds[fingerIndex]).value = fingerStates[fingerIndex];
-            updateHandPose();
-        }
+    const palmFolder = orientationFolder.addFolder('Palm Dir');
+    palmFolder.add(handOrientation.palmVector, 'x', -1, 1, 0.1);
+    palmFolder.add(handOrientation.palmVector, 'y', -1, 1, 0.1);
+    palmFolder.add(handOrientation.palmVector, 'z', -1, 1, 0.1);
 
-        function setPose(pose) {
-            switch(pose) {
-                case 'open':
-                    fingerStates = [1, 1, 1, 1, 1];
-                    break;
-                case 'fist':
-                    fingerStates = [0, 0, 0, 0, 0];
-                    break;
-                case 'point':
-                    fingerStates = [0.5, 1, 0, 0, 0];
-                    break;
-                case 'peace':
-                    fingerStates = [0, 1, 1, 0, 0];
-                    break;
-                case 'thumbsup':
-                    fingerStates = [1, 0, 0, 0, 0];
-                    break;
-                case 'ok':
-                    fingerStates = [0.3, 0.3, 1, 1, 1];
-                    break;
-            }
-            
-            // Update sliders
-            const sliderIds = ['thumb-slider', 'index-slider', 'middle-slider', 'ring-slider', 'pinky-slider'];
-            sliderIds.forEach((id, index) => {
-                document.getElementById(id).value = fingerStates[index];
-            });
-            
-            updateHandPose();
-        }
+    orientationFolder.open();
 
-        function resetHandView() {
-            handCamera.position.set(0, 0, 25);
-            handCamera.lookAt(0, 0, 0);
-            if (handModel) {
-                handModel.rotation.set(0, 0, 0);
-            }
-        }
+    // === Helper for visualizing vectors ===
+    const vectorHelpers = {
+      finger: new THREE.ArrowHelper(handOrientation.fingerVector.clone().normalize(), new THREE.Vector3(0, 0, 0), 1, 0xff0000),
+      thumb: new THREE.ArrowHelper(handOrientation.thumbVector.clone().normalize(), new THREE.Vector3(0, 0, 0), 1, 0x00ff00),
+      palm: new THREE.ArrowHelper(handOrientation.palmVector.clone().normalize(), new THREE.Vector3(0, 0, 0), 1, 0x0000ff)
+    };
+    scene.add(vectorHelpers.finger);
+    scene.add(vectorHelpers.thumb);
+    scene.add(vectorHelpers.palm);
 
-        // Mouse controls for plane
-        let planeMouseDown = false;
-        let planeMouseX = 0, planeMouseY = 0;
+    // === Animation Loop ===
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
 
-        planeCanvas.addEventListener('mousedown', (e) => {
-            planeMouseDown = true;
-            planeMouseX = e.clientX;
-            planeMouseY = e.clientY;
-        });
+      // Default fallback: if all vectors are zero, hand faces +Z
+      const defaultFacing = new THREE.Vector3(0, 0, 1);
 
-        planeCanvas.addEventListener('mousemove', (e) => {
-            if (planeMouseDown) {
-                const dx = e.clientX - planeMouseX;
-                const dy = e.clientY - planeMouseY;
-                
-                const axis = new THREE.Vector3(dy, dx, 0).normalize();
-                const angle = Math.sqrt(dx * dx + dy * dy) * 0.01;
-                
-                planeCamera.position.applyAxisAngle(axis, angle);
-                planeCamera.lookAt(0, 0, 0);
-                
-                planeMouseX = e.clientX;
-                planeMouseY = e.clientY;
-            }
-        });
+      const hasVector =
+        handOrientation.fingerVector.length() !== 0 ||
+        handOrientation.thumbVector.length() !== 0 ||
+        handOrientation.palmVector.length() !== 0;
 
-        planeCanvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const delta = e.deltaY * 0.01;
-            const dir = planeCamera.position.clone().normalize();
-            planeCamera.position.addScaledVector(dir, delta);
-        });
+      const palmVec = hasVector
+        ? handOrientation.palmVector.clone().normalize()
+        : defaultFacing;
 
-        // Mouse controls for hand
-        let handMouseDown = false;
-        let handMouseX = 0, handMouseY = 0;
-        let handRotationMode = 'camera';
+      // Update helper arrows
+      vectorHelpers.finger.setDirection(handOrientation.fingerVector.clone().normalize());
+      vectorHelpers.thumb.setDirection(handOrientation.thumbVector.clone().normalize());
+      vectorHelpers.palm.setDirection(palmVec);
 
-        function toggleRotationMode() {
-            handRotationMode = handRotationMode === 'camera' ? 'hand' : 'camera';
-            const btn = document.getElementById('camera-mode');
-            if (handRotationMode === 'camera') {
-                btn.textContent = 'Camera (Active)';
-            } else {
-                btn.textContent = 'Hand (Active)';
-            }
-        }
+      // Orient hand to face palm vector
+      const target = palmVec.clone().multiplyScalar(5);
+      handGroup.lookAt(target);
 
-        handCanvas.addEventListener('mousedown', (e) => {
-            handMouseDown = true;
-            handMouseX = e.clientX;
-            handMouseY = e.clientY;
-        });
+      renderer.render(scene, camera);
+    }
+    animate();
 
-        handCanvas.addEventListener('mousemove', (e) => {
-            if (handMouseDown && modelLoaded) {
-                const dx = e.clientX - handMouseX;
-                const dy = e.clientY - handMouseY;
-                
-                if (handRotationMode === 'camera') {
-                    const axis = new THREE.Vector3(dy, dx, 0).normalize();
-                    const angle = Math.sqrt(dx * dx + dy * dy) * 0.01;
-                    handCamera.position.applyAxisAngle(axis, angle);
-                    handCamera.lookAt(0, 0, 0);
-                } else {
-                    handModel.rotation.y += dx * 0.01;
-                    handModel.rotation.x += dy * 0.01;
-                }
-                
-                handMouseX = e.clientX;
-                handMouseY = e.clientY;
-            }
-        });
-
-        handCanvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const delta = e.deltaY * 0.01;
-            handCamera.position.z += delta;
-        });
-
-        document.addEventListener('mouseup', () => {
-            planeMouseDown = false;
-            handMouseDown = false;
-        });
-
-        // Resize
-        function resize() {
-            const width = window.innerWidth / 2;
-            const height = window.innerHeight;
-            
-            planeRenderer.setSize(width, height);
-            planeCamera.aspect = width / height;
-            planeCamera.updateProjectionMatrix();
-            
-            handRenderer.setSize(width, height);
-            handCamera.aspect = width / height;
-            handCamera.updateProjectionMatrix();
-        }
-
-        window.addEventListener('resize', resize);
-        resize();
-
-        // Animation loop
-        function animate() {
-            requestAnimationFrame(animate);
-            planeRenderer.render(planeScene, planeCamera);
-            handRenderer.render(handScene, handCamera);
-        }
-        animate();
-    </script>
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
 </body>
 </html>
