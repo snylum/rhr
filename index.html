@@ -1,493 +1,358 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASCII 3D Interactive Visualization</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            background: #0a0a0a;
-            color: #00ff00;
-            font-family: 'Courier New', monospace;
-            overflow: hidden;
-            user-select: none;
-        }
-        #container {
-            display: flex;
-            gap: 40px;
-            height: 90vh;
-            max-width: 100vw;
-            overflow: hidden;
-        }
-        #plane-container, #hand-container {
-            flex: 1;
-            min-width: 0;
-            max-width: 50%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            border: 2px solid #00ff00;
-            border-radius: 10px;
-            padding: 20px;
-            position: relative;
-            background: rgba(0, 20, 0, 0.3);
-            overflow: hidden;
-        }
-        #ascii-plane, #ascii-hand {
-            font-size: 14px;
-            line-height: 1.1;
-            white-space: pre;
-            cursor: move;
-            text-shadow: 0 0 8px #00ff00;
-            letter-spacing: 2px;
-        }
-        .controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            font-size: 11px;
-            color: #00ff00;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #00ff00;
-            z-index: 10;
-        }
-        .hand-controls, .arrow-controls {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            font-size: 11px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #00ff00;
-        }
-        .arrow-controls {
-            left: auto;
-            right: 10px;
-            width: 200px;
-        }
-        button {
-            background: #003300;
-            color: #00ff00;
-            border: 1px solid #00ff00;
-            padding: 5px 10px;
-            margin: 2px;
-            cursor: pointer;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-        }
-        button:hover {
-            background: #005500;
-        }
-        button:active {
-            background: #007700;
-        }
-        h3 {
-            margin: 0 0 10px 0;
-            font-size: 13px;
-        }
-        input[type="number"] {
-            width: 50px;
-            background: #001100;
-            color: #00ff00;
-            border: 1px solid #00ff00;
-            padding: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            border-radius: 3px;
-        }
-        label {
-            font-size: 10px;
-            margin-right: 5px;
-        }
-        .input-group {
-            margin: 5px 0;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Hand Right-Hand Rule Visualization</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0a0a0a;
+      color: #00ff00;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+    #container {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+    }
+    .canvas-container {
+      flex: 1;
+      position: relative;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 11px;
+      color: #00ff00;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #00ff00;
+      z-index: 10;
+    }
+    .bottom-controls {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      font-size: 11px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #00ff00;
+    }
+    .vector-controls {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      font-size: 11px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #00ff00;
+      width: 200px;
+    }
+    button {
+      background: #003300;
+      color: #00ff00;
+      border: 1px solid #00ff00;
+      padding: 5px 10px;
+      margin: 2px;
+      cursor: pointer;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+    }
+    button:hover {
+      background: #005500;
+    }
+    h3 {
+      margin: 0 0 10px 0;
+      font-size: 13px;
+    }
+    input[type="number"] {
+      width: 50px;
+      background: #001100;
+      color: #00ff00;
+      border: 1px solid #00ff00;
+      padding: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      border-radius: 3px;
+    }
+    label {
+      font-size: 10px;
+      margin-right: 5px;
+    }
+    .input-group {
+      margin: 5px 0;
+    }
+  </style>
 </head>
 <body>
-    <div id="container">
-        <div id="plane-container">
-            <div class="controls">
-                <h3>XYZ COORDINATE PLANE</h3>
-                Drag to rotate<br>
-                Rotation: <span id="plane-rotation">0°, 0°</span>
-            </div>
-            <div class="arrow-controls">
-                <h3>VECTORS (Right Hand Rule)</h3>
-                <div class="input-group">
-                    <label>i:</label><input type="number" id="vec-i" value="5" step="1">
-                    <label>j:</label><input type="number" id="vec-j" value="5" step="1">
-                </div>
-                <div class="input-group">
-                    <label>k:</label><input type="number" id="vec-k" value="5" step="1">
-                </div>
-                <button onclick="addVector()">Add Vector</button>
-                <button onclick="clearVectors()">Clear All</button>
-                <button onclick="resetPlaneView()">Reset View</button>
-            </div>
-            <div id="ascii-plane"></div>
+  <div id="container">
+    <!-- LEFT: 3D coordinate plane -->
+    <div class="canvas-container">
+      <div class="controls">
+        <h3>XYZ COORDINATE PLANE</h3>
+        Drag to rotate<br />
+        Scroll to zoom
+      </div>
+      <div class="vector-controls">
+        <h3>VECTORS</h3>
+        <div class="input-group">
+          <label>i:</label><input type="number" id="vec-i" value="5" step="1" />
+          <label>j:</label><input type="number" id="vec-j" value="5" step="1" />
         </div>
-        
-        <div id="hand-container">
-            <div class="controls">
-                <h3>ASCII HAND</h3>
-                Drag to rotate<br>
-                Rotation: <span id="hand-rotation">0°, 0°</span>
-            </div>
-            <div class="hand-controls">
-                <button onclick="toggleThumb()">Thumb Up/Down</button><br>
-                <button onclick="setFingers('fist')">Fist</button>
-                <button onclick="setFingers('open')">Open Hand</button><br>
-                <button onclick="setFingers('point')">Point</button>
-                <button onclick="setFingers('peace')">Peace</button><br>
-                <button onclick="resetHandView()">Reset View</button>
-            </div>
-            <div id="ascii-hand"></div>
+        <div class="input-group">
+          <label>k:</label><input type="number" id="vec-k" value="5" step="1" />
         </div>
+        <button onclick="addVector()">Add Vector</button>
+        <button onclick="clearVectors()">Clear All</button>
+        <button onclick="resetPlaneView()">Reset View</button>
+      </div>
+      <canvas id="plane-canvas"></canvas>
     </div>
 
-    <script>
-        let planeRotX = 0.3, planeRotY = 0.5;
-        let planeDragging = false;
-        let planeLastX = 0, planeLastY = 0;
+    <!-- RIGHT: 3D HAND -->
+    <div class="canvas-container">
+      <div class="controls">
+        <h3>3D RIGHT HAND</h3>
+        Drag to rotate<br />
+        Scroll to zoom
+      </div>
+      <div class="bottom-controls">
+        <h3>ROTATION MODE</h3>
+        <button id="camera-mode" onclick="toggleRotationMode()" style="background: #005500;">Camera (Active)</button><br />
+        <h3>HAND CONTROLS</h3>
+        <button onclick="toggleThumb()">Thumb Up/Down</button><br />
+        <button onclick="setFingers('fist')">Fist</button>
+        <button onclick="setFingers('open')">Open Hand</button><br />
+        <button onclick="setFingers('point')">Point</button>
+        <button onclick="setFingers('peace')">Peace</button><br />
+        <button onclick="resetHandView()">Reset View</button>
+      </div>
+      <canvas id="hand-canvas"></canvas>
+    </div>
+  </div>
 
-        let handRotX = 0.2, handRotY = -0.3;
-        let handDragging = false;
-        let handLastX = 0, handLastY = 0;
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
 
-        let thumbUp = true;
-        let fingerStates = [1, 1, 1, 1, 1]; // 0=curled, 1=extended (thumb, index, middle, ring, pinky)
-        
-        let vectors = [];
+  <script>
+    // ================== COORDINATE PLANE ==================
+    const planeCanvas = document.getElementById("plane-canvas");
+    const planeScene = new THREE.Scene();
+    planeScene.background = new THREE.Color(0x0a0a0a);
+    const planeCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+    const planeRenderer = new THREE.WebGLRenderer({ canvas: planeCanvas, antialias: true });
 
-        function rotate3D(x, y, z, rotX, rotY) {
-            let cosY = Math.cos(rotY);
-            let sinY = Math.sin(rotY);
-            let xr = x * cosY - z * sinY;
-            let zr = x * sinY + z * cosY;
-            x = xr;
-            z = zr;
-            
-            let cosX = Math.cos(rotX);
-            let sinX = Math.sin(rotX);
-            let yr = y * cosX - z * sinX;
-            zr = y * sinX + z * cosX;
-            
-            return {x, y: yr, z: zr};
-        }
+    planeCamera.position.set(15, 15, 15);
+    planeCamera.lookAt(0, 0, 0);
 
-        function project(x, y, z, scale = 200) {
-            let perspective = scale / (scale + z);
-            return {
-                x: Math.round(x * perspective),
-                y: Math.round(y * perspective),
-                z: z
-            };
-        }
+    const axisLength = 15;
+    const axes = new THREE.AxesHelper(axisLength);
+    planeScene.add(axes);
 
-        function generate3DPlane(rotX, rotY) {
-            let points = [];
-            let size = 15;
-            
-            // Axes
-            for (let i = -size; i <= size; i++) {
-                points.push({x: i, y: 0, z: 0, char: '─', color: 1}); // X axis
-                points.push({x: 0, y: i, z: 0, char: '│', color: 2}); // Y axis
-                points.push({x: 0, y: 0, z: i, char: '/', color: 3}); // Z axis
-            }
-            
-            // Grid lines on XY plane
-            for (let i = -size; i <= size; i += 5) {
-                for (let j = -size; j <= size; j++) {
-                    if (i !== 0 && j !== 0) {
-                        points.push({x: i, y: j, z: 0, char: '·', color: 0});
-                        points.push({x: j, y: i, z: 0, char: '·', color: 0});
-                    }
-                }
-            }
+    const gridHelper = new THREE.GridHelper(30, 30, 0x004400, 0x002200);
+    planeScene.add(gridHelper);
 
-            // Origin
-            points.push({x: 0, y: 0, z: 0, char: '⊕', color: 4});
+    const origin = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+    planeScene.add(origin);
 
-            // Add vectors with smooth lines
-            vectors.forEach((vec, idx) => {
-                let steps = Math.max(Math.abs(vec.i), Math.abs(vec.j), Math.abs(vec.k)) * 3;
-                let prevProj = null;
-                
-                for (let s = 0; s <= steps; s++) {
-                    let t = s / steps;
-                    let x = vec.i * t;
-                    let y = vec.j * t;
-                    let z = vec.k * t;
-                    
-                    let rot = rotate3D(x, y, z, rotX, rotY);
-                    let proj = project(rot.x, rot.y, rot.z);
-                    
-                    if (prevProj) {
-                        // Draw line between previous and current point
-                        let dx = proj.x - prevProj.x;
-                        let dy = proj.y - prevProj.y;
-                        let dist = Math.sqrt(dx * dx + dy * dy);
-                        let lineSteps = Math.ceil(dist);
-                        
-                        for (let l = 0; l <= lineSteps; l++) {
-                            let lt = l / lineSteps;
-                            let lx = prevProj.x + dx * lt;
-                            let ly = prevProj.y + dy * lt;
-                            let lz = prevProj.z + (proj.z - prevProj.z) * lt;
-                            
-                            points.push({
-                                x: lx + 60,
-                                y: ly + 30,
-                                z: lz,
-                                char: '█',
-                                color: 5
-                            });
-                        }
-                    }
-                    
-                    prevProj = proj;
-                }
-                
-                // Arrowhead at the end
-                let rot = rotate3D(vec.i, vec.j, vec.k, rotX, rotY);
-                let proj = project(rot.x, rot.y, rot.z);
-                points.push({
-                    x: proj.x + 60,
-                    y: proj.y + 30,
-                    z: proj.z,
-                    char: '►',
-                    color: 5
-                });
-            });
+    const vectorGroup = new THREE.Group();
+    planeScene.add(vectorGroup);
+    let vectors = [];
 
-            // Transform points
-            let projected = points.map(p => {
-                let rot = rotate3D(p.x, p.y, p.z, rotX, rotY);
-                let proj = project(rot.x, rot.y, rot.z);
-                return {
-                    x: proj.x + 60,
-                    y: proj.y + 30,
-                    z: proj.z,
-                    char: p.char,
-                    color: p.color
-                };
-            });
+    function addVector() {
+      const i = parseFloat(document.getElementById("vec-i").value);
+      const j = parseFloat(document.getElementById("vec-j").value);
+      const k = parseFloat(document.getElementById("vec-k").value);
 
-            projected.sort((a, b) => a.z - b.z);
+      const dir = new THREE.Vector3(i, j, k);
+      const length = dir.length();
+      const arrow = new THREE.ArrowHelper(dir.normalize(), new THREE.Vector3(0, 0, 0), length, 0xff00ff, length * 0.2, length * 0.1);
+      vectorGroup.add(arrow);
+      vectors.push(arrow);
+    }
 
-            let canvas = Array(60).fill(null).map(() => Array(120).fill(' '));
-            projected.forEach(p => {
-                if (p.x >= 0 && p.x < 120 && p.y >= 0 && p.y < 60) {
-                    canvas[p.y][p.x] = p.char;
-                }
-            });
+    function clearVectors() {
+      while (vectorGroup.children.length) vectorGroup.remove(vectorGroup.children[0]);
+      vectors = [];
+    }
 
-            return canvas.map(row => row.join('')).join('\n');
-        }
+    function resetPlaneView() {
+      planeCamera.position.set(15, 15, 15);
+      planeCamera.lookAt(0, 0, 0);
+    }
 
-        function generateHand(rotX, rotY) {
-            let points = [];
-            
-            // Palm - thicker 3D palm with depth
-            for (let y = 5; y < 14; y++) {
-                for (let x = -4; x <= 4; x++) {
-                    for (let z = -1; z <= 1; z++) {
-                        if (Math.abs(x) <= 4 - Math.abs(y - 9) * 0.3) {
-                            points.push({x, y, z, char: '█'});
-                        }
-                    }
-                }
-            }
+    // ================== HAND SCENE ==================
+    const handCanvas = document.getElementById("hand-canvas");
+    const handScene = new THREE.Scene();
+    handScene.background = new THREE.Color(0x0a0a0a);
+    const handCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+    const handRenderer = new THREE.WebGLRenderer({ canvas: handCanvas, antialias: true });
+    handCamera.position.set(0, 0, 25);
+    handCamera.lookAt(0, 0, 0);
 
-            // Thumb - with 3D depth
-            if (fingerStates[0]) {
-                // Thumb up (perpendicular)
-                for (let i = 0; i < 6; i++) {
-                    for (let z = -1; z <= 1; z++) {
-                        points.push({x: -5 - i * 0.3, y: 8 - i, z, char: '█'});
-                    }
-                }
-            } else {
-                // Thumb curled
-                for (let i = 0; i < 3; i++) {
-                    for (let z = -1; z <= 1; z++) {
-                        points.push({x: -4, y: 7 + i, z, char: '█'});
-                    }
-                }
-            }
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+    hemiLight.position.set(0, 20, 0);
+    handScene.add(hemiLight);
 
-            // Fingers - with 3D volume
-            let fingerX = [-2, 0, 2, 4];
-            for (let f = 0; f < 4; f++) {
-                let fx = fingerX[f];
-                let extended = fingerStates[f + 1];
-                
-                if (extended) {
-                    // Extended finger with thickness
-                    for (let i = 0; i < 8; i++) {
-                        for (let dx = -0.5; dx <= 0.5; dx++) {
-                            for (let z = -0.5; z <= 0.5; z++) {
-                                points.push({x: fx + dx, y: 4 - i, z, char: '█'});
-                            }
-                        }
-                    }
-                    // Fingertip
-                    points.push({x: fx, y: -4, z: 0, char: '▀'});
-                } else {
-                    // Curled finger with volume
-                    for (let i = 0; i < 3; i++) {
-                        for (let dx = -0.5; dx <= 0.5; dx++) {
-                            for (let z = -0.5; z <= 0.5; z++) {
-                                points.push({x: fx + dx, y: 4 - i, z, char: '█'});
-                            }
-                        }
-                    }
-                }
-            }
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(10, 10, 10);
+    handScene.add(dirLight);
 
-            // Wrist - with 3D depth
-            for (let y = 14; y < 19; y++) {
-                for (let x = -3; x <= 3; x++) {
-                    for (let z = -1; z <= 1; z++) {
-                        points.push({x, y, z, char: '▓'});
-                    }
-                }
-            }
+    let handModel, mixer, actions = {};
+    const loader = new THREE.GLTFLoader();
 
-            // Transform
-            let projected = points.map(p => {
-                let rot = rotate3D(p.x, p.y - 10, p.z, rotX, rotY);
-                let proj = project(rot.x, rot.y, rot.z, 150);
-                return {
-                    x: proj.x + 60,
-                    y: proj.y + 30,
-                    z: proj.z,
-                    char: p.char
-                };
-            });
+    // ✅ Using a lightweight, rigged right-hand GLB model
+    loader.load(
+      "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/AnimatedHand/glTF-Binary/AnimatedHand.glb",
+      (gltf) => {
+        handModel = gltf.scene;
+        handModel.scale.set(5, 5, 5);
+        handScene.add(handModel);
+        mixer = new THREE.AnimationMixer(handModel);
 
-            projected.sort((a, b) => a.z - b.z);
-
-            let canvas = Array(60).fill(null).map(() => Array(120).fill(' '));
-            projected.forEach(p => {
-                if (p.x >= 0 && p.x < 120 && p.y >= 0 && p.y < 60) {
-                    canvas[p.y][p.x] = p.char;
-                }
-            });
-
-            return canvas.map(row => row.join('')).join('\n');
-        }
-
-        function updatePlane() {
-            document.getElementById('ascii-plane').textContent = generate3DPlane(planeRotX, planeRotY);
-            document.getElementById('plane-rotation').textContent = 
-                `${Math.round(planeRotX * 180 / Math.PI)}°, ${Math.round(planeRotY * 180 / Math.PI)}°`;
-        }
-
-        function updateHand() {
-            document.getElementById('ascii-hand').textContent = generateHand(handRotX, handRotY);
-            document.getElementById('hand-rotation').textContent = 
-                `${Math.round(handRotX * 180 / Math.PI)}°, ${Math.round(handRotY * 180 / Math.PI)}°`;
-        }
-
-        function toggleThumb() {
-            fingerStates[0] = 1 - fingerStates[0];
-            updateHand();
-        }
-
-        function setFingers(pose) {
-            switch(pose) {
-                case 'fist':
-                    fingerStates = [0, 0, 0, 0, 0];
-                    break;
-                case 'open':
-                    fingerStates = [1, 1, 1, 1, 1];
-                    break;
-                case 'point':
-                    fingerStates = [1, 1, 0, 0, 0];
-                    break;
-                case 'peace':
-                    fingerStates = [0, 1, 1, 0, 0];
-                    break;
-            }
-            updateHand();
-        }
-
-        function addVector() {
-            let i = parseFloat(document.getElementById('vec-i').value);
-            let j = parseFloat(document.getElementById('vec-j').value);
-            let k = parseFloat(document.getElementById('vec-k').value);
-            vectors.push({i, j, k});
-            updatePlane();
-        }
-
-        function clearVectors() {
-            vectors = [];
-            updatePlane();
-        }
-
-        function resetPlaneView() {
-            planeRotX = 0.3;
-            planeRotY = 0.5;
-            updatePlane();
-        }
-
-        function resetHandView() {
-            handRotX = 0.2;
-            handRotY = -0.3;
-            updateHand();
-        }
-
-        let planeEl = document.getElementById('ascii-plane');
-        planeEl.addEventListener('mousedown', (e) => {
-            planeDragging = true;
-            planeLastX = e.clientX;
-            planeLastY = e.clientY;
+        // Store animation clips for later control (optional)
+        gltf.animations.forEach((clip) => {
+          actions[clip.name] = mixer.clipAction(clip);
         });
+      },
+      undefined,
+      (err) => console.error("Failed to load hand model", err)
+    );
 
-        let handEl = document.getElementById('ascii-hand');
-        handEl.addEventListener('mousedown', (e) => {
-            handDragging = true;
-            handLastX = e.clientX;
-            handLastY = e.clientY;
-        });
+    let fingerStates = { thumb: 1, index: 1, middle: 1, ring: 1, pinky: 1 };
 
-        document.addEventListener('mousemove', (e) => {
-            if (planeDragging) {
-                let dx = e.clientX - planeLastX;
-                let dy = e.clientY - planeLastY;
-                planeRotY += dx * 0.01;
-                planeRotX += dy * 0.01;
-                planeLastX = e.clientX;
-                planeLastY = e.clientY;
-                updatePlane();
-            }
-            if (handDragging) {
-                let dx = e.clientX - handLastX;
-                let dy = e.clientY - handLastY;
-                handRotY += dx * 0.01;
-                handRotX += dy * 0.01;
-                handLastX = e.clientX;
-                handLastY = e.clientY;
-                updateHand();
-            }
-        });
+    function toggleThumb() {
+      fingerStates.thumb = 1 - fingerStates.thumb;
+      animateHandPose();
+    }
 
-        document.addEventListener('mouseup', () => {
-            planeDragging = false;
-            handDragging = false;
-        });
+    function setFingers(pose) {
+      if (pose === "fist") fingerStates = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+      if (pose === "open") fingerStates = { thumb: 1, index: 1, middle: 1, ring: 1, pinky: 1 };
+      if (pose === "point") fingerStates = { thumb: 1, index: 1, middle: 0, ring: 0, pinky: 0 };
+      if (pose === "peace") fingerStates = { thumb: 0, index: 1, middle: 1, ring: 0, pinky: 0 };
+      animateHandPose();
+    }
 
-        updatePlane();
-        updateHand();
-    </script>
+    function animateHandPose() {
+      if (!handModel) return;
+      handModel.traverse((bone) => {
+        if (bone.isBone) {
+          if (bone.name.includes("thumb")) bone.rotation.x = fingerStates.thumb ? 0 : -0.6;
+          if (bone.name.includes("index")) bone.rotation.x = fingerStates.index ? 0 : -0.9;
+          if (bone.name.includes("middle")) bone.rotation.x = fingerStates.middle ? 0 : -0.9;
+          if (bone.name.includes("ring")) bone.rotation.x = fingerStates.ring ? 0 : -0.9;
+          if (bone.name.includes("pinky")) bone.rotation.x = fingerStates.pinky ? 0 : -0.9;
+        }
+      });
+    }
+
+    function resetHandView() {
+      handCamera.position.set(0, 0, 25);
+      handCamera.lookAt(0, 0, 0);
+      if (handModel) handModel.rotation.set(0, 0, 0);
+    }
+
+    // ================== CONTROLS ==================
+    let planeMouseDown = false, planeMouseX = 0, planeMouseY = 0;
+    planeCanvas.addEventListener("mousedown", (e) => { planeMouseDown = true; planeMouseX = e.clientX; planeMouseY = e.clientY; });
+    planeCanvas.addEventListener("mousemove", (e) => {
+      if (planeMouseDown) {
+        const dx = e.clientX - planeMouseX, dy = e.clientY - planeMouseY;
+        const axis = new THREE.Vector3(dy, dx, 0).normalize();
+        const angle = Math.sqrt(dx * dx + dy * dy) * 0.01;
+        planeCamera.position.applyAxisAngle(axis, angle);
+        planeCamera.lookAt(0, 0, 0);
+        planeMouseX = e.clientX; planeMouseY = e.clientY;
+      }
+    });
+    planeCanvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const delta = e.deltaY * 0.01;
+      const dir = planeCamera.position.clone().normalize();
+      planeCamera.position.addScaledVector(dir, delta);
+    });
+
+    let handMouseDown = false, handMouseX = 0, handMouseY = 0;
+    let handRotationMode = "camera";
+
+    function toggleRotationMode() {
+      handRotationMode = handRotationMode === "camera" ? "hand" : "camera";
+      const btn = document.getElementById("camera-mode");
+      btn.textContent = handRotationMode === "camera" ? "Camera (Active)" : "Hand (Active)";
+      btn.style.background = "#005500";
+    }
+
+    handCanvas.addEventListener("mousedown", (e) => {
+      handMouseDown = true;
+      handMouseX = e.clientX;
+      handMouseY = e.clientY;
+    });
+
+    handCanvas.addEventListener("mousemove", (e) => {
+      if (handMouseDown) {
+        const dx = e.clientX - handMouseX, dy = e.clientY - handMouseY;
+        if (handRotationMode === "camera") {
+          const axis = new THREE.Vector3(dy, dx, 0).normalize();
+          const angle = Math.sqrt(dx * dx + dy * dy) * 0.01;
+          handCamera.position.applyAxisAngle(axis, angle);
+          handCamera.lookAt(0, 0, 0);
+        } else if (handModel) {
+          handModel.rotation.y += dx * 0.01;
+          handModel.rotation.x += dy * 0.01;
+        }
+        handMouseX = e.clientX;
+        handMouseY = e.clientY;
+      }
+    });
+
+    handCanvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      handCamera.position.z += e.deltaY * 0.01;
+    });
+
+    document.addEventListener("mouseup", () => {
+      planeMouseDown = false;
+      handMouseDown = false;
+    });
+
+    // ================== RENDER LOOP ==================
+    function resize() {
+      const width = window.innerWidth / 2, height = window.innerHeight;
+      planeRenderer.setSize(width, height);
+      planeCamera.aspect = width / height;
+      planeCamera.updateProjectionMatrix();
+      handRenderer.setSize(width, height);
+      handCamera.aspect = width / height;
+      handCamera.updateProjectionMatrix();
+    }
+
+    window.addEventListener("resize", resize);
+    resize();
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (mixer) mixer.update(clock.getDelta());
+      planeRenderer.render(planeScene, planeCamera);
+      handRenderer.render(handScene, handCamera);
+    }
+
+    animate();
+  </script>
 </body>
 </html>
