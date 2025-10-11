@@ -1,1 +1,601 @@
-<!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>True 3D Interactive Visualization</title> <style> body { margin: 0; padding: 0; background: #0a0a0a; color: #00ff00; font-family: 'Courier New', monospace; overflow: hidden; } #container { display: flex; width: 100vw; height: 100vh; } .canvas-container { flex: 1; position: relative; } canvas { display: block; width: 100%; height: 100%; } .controls { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #00ff00; background: rgba(0, 0, 0, 0.8); padding: 10px; border-radius: 5px; border: 1px solid #00ff00; z-index: 10; } .bottom-controls { position: absolute; bottom: 10px; left: 10px; font-size: 11px; background: rgba(0, 0, 0, 0.8); padding: 10px; border-radius: 5px; border: 1px solid #00ff00; max-height: 80vh; overflow-y: auto; } .vector-controls { position: absolute; bottom: 10px; right: 10px; font-size: 11px; background: rgba(0, 0, 0, 0.8); padding: 10px; border-radius: 5px; border: 1px solid #00ff00; width: 200px; } button { background: #003300; color: #00ff00; border: 1px solid #00ff00; padding: 5px 10px; margin: 2px; cursor: pointer; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 10px; } button:hover { background: #005500; } h3 { margin: 0 0 10px 0; font-size: 13px; } input[type="number"], input[type="range"] { width: 50px; background: #001100; color: #00ff00; border: 1px solid #00ff00; padding: 3px; font-family: 'Courier New', monospace; font-size: 10px; border-radius: 3px; } input[type="range"] { width: 100px; } label { font-size: 10px; margin-right: 5px; } .input-group { margin: 5px 0; } .finger-control { margin: 8px 0; padding: 5px; border: 1px solid #003300; border-radius: 3px; } </style> </head> <body> <div id="container"> <div class="canvas-container"> <div class="controls"> <h3>XYZ COORDINATE PLANE</h3> Drag to rotate<br> Scroll to zoom </div> <div class="vector-controls"> <h3>VECTORS</h3> <div class="input-group"> <label>i:</label><input type="number" id="vec-i" value="5" step="1"> <label>j:</label><input type="number" id="vec-j" value="5" step="1"> </div> <div class="input-group"> <label>k:</label><input type="number" id="vec-k" value="5" step="1"> </div> <button onclick="addVector()">Add Vector</button> <button onclick="clearVectors()">Clear All</button> <button onclick="resetPlaneView()">Reset View</button> </div> <canvas id="plane-canvas"></canvas> </div> <div class="canvas-container"> <div class="controls"> <h3>3D HAND MODEL</h3> Drag to rotate<br> Scroll to zoom </div> <div class="bottom-controls"> <h3>ROTATION MODE</h3> <button id="camera-mode" onclick="toggleRotationMode()" style="background: #005500;">Camera (Active)</button><br> <h3>QUICK POSES</h3> <button onclick="setPose('open')">Open Hand</button> <button onclick="setPose('fist')">Fist</button><br> <button onclick="setPose('point')">Point</button> <button onclick="setPose('peace')">Peace</button><br> <button onclick="setPose('thumbsup')">Thumbs Up</button> <button onclick="setPose('ok')">OK Sign</button><br> <h3>INDIVIDUAL FINGERS</h3> <div class="finger-control"> <label>Thumb:</label><br> <input type="range" id="thumb-slider" min="0" max="100" value="0" oninput="setFingerCurl(0, this.value)"> <span id="thumb-val">0%</span> </div> <div class="finger-control"> <label>Index:</label><br> <input type="range" id="index-slider" min="0" max="100" value="0" oninput="setFingerCurl(1, this.value)"> <span id="index-val">0%</span> </div> <div class="finger-control"> <label>Middle:</label><br> <input type="range" id="middle-slider" min="0" max="100" value="0" oninput="setFingerCurl(2, this.value)"> <span id="middle-val">0%</span> </div> <div class="finger-control"> <label>Ring:</label><br> <input type="range" id="ring-slider" min="0" max="100" value="0" oninput="setFingerCurl(3, this.value)"> <span id="ring-val">0%</span> </div> <div class="finger-control"> <label>Pinky:</label><br> <input type="range" id="pinky-slider" min="0" max="100" value="0" oninput="setFingerCurl(4, this.value)"> <span id="pinky-val">0%</span> </div> <button onclick="resetHandView()">Reset View</button> </div> <canvas id="hand-canvas"></canvas> </div> </div> <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> <script> // PLANE SCENE const planeCanvas = document.getElementById('plane-canvas'); const planeScene = new THREE.Scene(); planeScene.background = new THREE.Color(0x0a0a0a); const planeCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000); const planeRenderer = new THREE.WebGLRenderer({canvas: planeCanvas, antialias: true}); planeCamera.position.set(15, 15, 15); planeCamera.lookAt(0, 0, 0); // Axes const axisLength = 15; const xAxis = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0) ]); const xLine = new THREE.Line(xAxis, new THREE.LineBasicMaterial({color: 0xff0000, linewidth: 2})); planeScene.add(xLine); const yAxis = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0) ]); const yLine = new THREE.Line(yAxis, new THREE.LineBasicMaterial({color: 0x00ff00, linewidth: 2})); planeScene.add(yLine); const zAxis = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(0, 0, -axisLength), new THREE.Vector3(0, 0, axisLength) ]); const zLine = new THREE.Line(zAxis, new THREE.LineBasicMaterial({color: 0x0000ff, linewidth: 2})); planeScene.add(zLine); // Grid const gridHelper = new THREE.GridHelper(30, 30, 0x004400, 0x002200); planeScene.add(gridHelper); // Origin marker const originGeom = new THREE.SphereGeometry(0.3, 16, 16); const originMat = new THREE.MeshBasicMaterial({color: 0xffff00}); const originMesh = new THREE.Mesh(originGeom, originMat); planeScene.add(originMesh); // Vector group const vectorGroup = new THREE.Group(); planeScene.add(vectorGroup); let vectors = []; function addVector() { const i = parseFloat(document.getElementById('vec-i').value); const j = parseFloat(document.getElementById('vec-j').value); const k = parseFloat(document.getElementById('vec-k').value); const dir = new THREE.Vector3(i, j, k); const length = dir.length(); const arrowHelper = new THREE.ArrowHelper( dir.normalize(), new THREE.Vector3(0, 0, 0), length, 0xff00ff, length * 0.2, length * 0.1 ); vectorGroup.add(arrowHelper); vectors.push(arrowHelper); } function clearVectors() { while(vectorGroup.children.length > 0) { vectorGroup.remove(vectorGroup.children[0]); } vectors = []; } function resetPlaneView() { planeCamera.position.set(15, 15, 15); planeCamera.lookAt(0, 0, 0); } // HAND SCENE const handCanvas = document.getElementById('hand-canvas'); const handScene = new THREE.Scene(); handScene.background = new THREE.Color(0x0a0a0a); const handCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000); const handRenderer = new THREE.WebGLRenderer({canvas: handCanvas, antialias: true}); handCamera.position.set(0, 0, 30); handCamera.lookAt(0, 0, 0); const handLight = new THREE.DirectionalLight(0xffffff, 1); handLight.position.set(10, 10, 10); handScene.add(handLight); handScene.add(new THREE.AmbientLight(0x505050)); const handMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff88, shininess: 30 }); let handGroup = new THREE.Group(); handScene.add(handGroup); // Finger curl states (0 = extended, 100 = fully curled) let fingerCurls = [0, 0, 0, 0, 0]; // thumb, index, middle, ring, pinky let fingerObjects = { thumb: [], index: [], middle: [], ring: [], pinky: [] }; function createPentagonPalm() { const shape = new THREE.Shape(); const radius = 4; const angles = [ Math.PI / 2, // top Math.PI / 2 + 2 * Math.PI / 5, Math.PI / 2 + 4 * Math.PI / 5, Math.PI / 2 + 6 * Math.PI / 5, Math.PI / 2 + 8 * Math.PI / 5 ]; shape.moveTo(radius * Math.cos(angles[0]), radius * Math.sin(angles[0])); for (let i = 1; i < 5; i++) { shape.lineTo(radius * Math.cos(angles[i]), radius * Math.sin(angles[i])); } shape.lineTo(radius * Math.cos(angles[0]), radius * Math.sin(angles[0])); const extrudeSettings = { depth: 2, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 3 }; const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings); const palm = new THREE.Mesh(geometry, handMaterial); palm.rotation.x = Math.PI / 2; palm.position.y = -2; return palm; } function createFingerSegment(width, height, depth) { const geometry = new THREE.BoxGeometry(width, height, depth); return new THREE.Mesh(geometry, handMaterial); } function createHand() { // Clear previous hand while(handGroup.children.length > 0) { handGroup.remove(handGroup.children[0]); } fingerObjects = { thumb: [], index: [], middle: [], ring: [], pinky: [] }; // Create pentagon palm const palm = createPentagonPalm(); handGroup.add(palm); // Finger positions and properties const fingers = [ { name: 'thumb', x: -5, baseY: -1, length: 3, width: 1.2, isThumb: true }, { name: 'index', x: -2.5, baseY: 2, length: 3.5, width: 0.9, isThumb: false }, { name: 'middle', x: -0.5, baseY: 3, length: 4, width: 0.9, isThumb: false }, { name: 'ring', x: 1.5, baseY: 2.5, length: 3.5, width: 0.9, isThumb: false }, { name: 'pinky', x: 3.5, baseY: 1.5, length: 2.8, width: 0.8, isThumb: false } ]; fingers.forEach((finger, idx) => { const curl = fingerCurls[idx] / 100; // 0 to 1 // Segment lengths (divide finger into 3 parts) const seg1Len = finger.length * 0.35; const seg2Len = finger.length * 0.35; const seg3Len = finger.length * 0.30; if (finger.isThumb) { // THUMB - curls differently (toward palm) const baseAngle = curl * Math.PI / 2.5; const midAngle = curl * Math.PI / 3; const tipAngle = curl * Math.PI / 4; // Segment 1 (base) const seg1 = createFingerSegment(finger.width, seg1Len, finger.width); seg1.position.set(finger.x, finger.baseY, 0); seg1.rotation.z = -Math.PI / 4 - baseAngle; seg1.position.x += seg1Len / 2 * Math.sin(-Math.PI / 4 - baseAngle); seg1.position.y += seg1Len / 2 * Math.cos(-Math.PI / 4 - baseAngle); handGroup.add(seg1); fingerObjects.thumb.push(seg1); // Calculate end of segment 1 const seg1EndX = seg1.position.x + seg1Len / 2 * Math.sin(-Math.PI / 4 - baseAngle); const seg1EndY = seg1.position.y + seg1Len / 2 * Math.cos(-Math.PI / 4 - baseAngle); // Segment 2 (middle) const seg2 = createFingerSegment(finger.width * 0.95, seg2Len, finger.width * 0.95); seg2.rotation.z = -Math.PI / 4 - baseAngle - midAngle; seg2.position.x = seg1EndX + seg2Len / 2 * Math.sin(seg2.rotation.z); seg2.position.y = seg1EndY + seg2Len / 2 * Math.cos(seg2.rotation.z); handGroup.add(seg2); fingerObjects.thumb.push(seg2); // Calculate end of segment 2 const seg2EndX = seg2.position.x + seg2Len / 2 * Math.sin(seg2.rotation.z); const seg2EndY = seg2.position.y + seg2Len / 2 * Math.cos(seg2.rotation.z); // Segment 3 (tip) const seg3 = createFingerSegment(finger.width * 0.9, seg3Len, finger.width * 0.9); seg3.rotation.z = seg2.rotation.z - tipAngle; seg3.position.x = seg2EndX + seg3Len / 2 * Math.sin(seg3.rotation.z); seg3.position.y = seg2EndY + seg3Len / 2 * Math.cos(seg3.rotation.z); handGroup.add(seg3); fingerObjects.thumb.push(seg3); } else { // REGULAR FINGERS - curl inward const baseAngle = curl * Math.PI / 4; const midAngle = curl * Math.PI / 3; const tipAngle = curl * Math.PI / 3.5; // Segment 1 (base) const seg1 = createFingerSegment(finger.width, seg1Len, finger.width); seg1.position.set(finger.x, finger.baseY + seg1Len / 2, 0); seg1.rotation.x = baseAngle; seg1.position.y -= seg1Len / 2 * (1 - Math.cos(baseAngle)); seg1.position.z -= seg1Len / 2 * Math.sin(baseAngle); handGroup.add(seg1); fingerObjects[finger.name].push(seg1); // Calculate end of segment 1 const seg1EndY = seg1.position.y + seg1Len / 2 * Math.cos(baseAngle); const seg1EndZ = seg1.position.z - seg1Len / 2 * Math.sin(baseAngle); // Segment 2 (middle) const seg2 = createFingerSegment(finger.width * 0.95, seg2Len, finger.width * 0.95); seg2.rotation.x = baseAngle + midAngle; seg2.position.x = finger.x; seg2.position.y = seg1EndY + seg2Len / 2 * Math.cos(seg2.rotation.x); seg2.position.z = seg1EndZ - seg2Len / 2 * Math.sin(seg2.rotation.x); handGroup.add(seg2); fingerObjects[finger.name].push(seg2); // Calculate end of segment 2 const seg2EndY = seg2.position.y + seg2Len / 2 * Math.cos(seg2.rotation.x); const seg2EndZ = seg2.position.z - seg2Len / 2 * Math.sin(seg2.rotation.x); // Segment 3 (tip) const seg3 = createFingerSegment(finger.width * 0.9, seg3Len, finger.width * 0.9); seg3.rotation.x = seg2.rotation.x + tipAngle; seg3.position.x = finger.x; seg3.position.y = seg2EndY + seg3Len / 2 * Math.cos(seg3.rotation.x); seg3.position.z = seg2EndZ - seg3Len / 2 * Math.sin(seg3.rotation.x); handGroup.add(seg3); fingerObjects[finger.name].push(seg3); } }); } function setFingerCurl(fingerIndex, value) { fingerCurls[fingerIndex] = parseFloat(value); const names = ['thumb', 'index', 'middle', 'ring', 'pinky']; document.getElementById(names[fingerIndex] + '-val').textContent = Math.round(value) + '%'; createHand(); } function setPose(pose) { const sliders = ['thumb-slider', 'index-slider', 'middle-slider', 'ring-slider', 'pinky-slider']; switch(pose) { case 'open': fingerCurls = [0, 0, 0, 0, 0]; break; case 'fist': fingerCurls = [100, 100, 100, 100, 100]; break; case 'point': fingerCurls = [50, 0, 100, 100, 100]; break; case 'peace': fingerCurls = [100, 0, 0, 100, 100]; break; case 'thumbsup': fingerCurls = [0, 100, 100, 100, 100]; break; case 'ok': fingerCurls = [70, 70, 0, 0, 0]; break; } sliders.forEach((id, idx) => { document.getElementById(id).value = fingerCurls[idx]; const names = ['thumb', 'index', 'middle', 'ring', 'pinky']; document.getElementById(names[idx] + '-val').textContent = Math.round(fingerCurls[idx]) + '%'; }); createHand(); } function resetHandView() { handCamera.position.set(0, 0, 30); handCamera.lookAt(0, 0, 0); handGroup.rotation.set(0, 0, 0); } createHand(); // Mouse controls for plane let planeMouseDown = false; let planeMouseX = 0, planeMouseY = 0; planeCanvas.addEventListener('mousedown', (e) => { planeMouseDown = true; planeMouseX = e.clientX; planeMouseY = e.clientY; }); planeCanvas.addEventListener('mousemove', (e) => { if (planeMouseDown) { const dx = e.clientX - planeMouseX; const dy = e.clientY - planeMouseY; const axis = new THREE.Vector3(dy, dx, 0).normalize(); const angle = Math.sqrt(dx * dx + dy * dy) * 0.01; planeCamera.position.applyAxisAngle(axis, angle); planeCamera.lookAt(0, 0, 0); planeMouseX = e.clientX; planeMouseY = e.clientY; } }); planeCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const delta = e.deltaY * 0.01; const dir = planeCamera.position.clone().normalize(); planeCamera.position.addScaledVector(dir, delta); }); // Mouse controls for hand let handMouseDown = false; let handMouseX = 0, handMouseY = 0; let handRotationMode = 'camera'; function toggleRotationMode() { handRotationMode = handRotationMode === 'camera' ? 'hand' : 'camera'; const btn = document.getElementById('camera-mode'); if (handRotationMode === 'camera') { btn.textContent = 'Camera (Active)'; btn.style.background = '#005500'; } else { btn.textContent = 'Hand (Active)'; btn.style.background = '#005500'; } } handCanvas.addEventListener('mousedown', (e) => { handMouseDown = true; handMouseX = e.clientX; handMouseY = e.clientY; }); handCanvas.addEventListener('mousemove', (e) => { if (handMouseDown) { const dx = e.clientX - handMouseX; const dy = e.clientY - handMouseY; if (handRotationMode === 'camera') { const axis = new THREE.Vector3(dy, dx, 0).normalize(); const angle = Math.sqrt(dx * dx + dy * dy) * 0.01; handCamera.position.applyAxisAngle(axis, angle); handCamera.lookAt(0, 0, 0); } else { handGroup.rotation.y += dx * 0.01; handGroup.rotation.x += dy * 0.01; } handMouseX = e.clientX; handMouseY = e.clientY; } }); handCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const delta = e.deltaY * 0.01; handCamera.position.z += delta; }); document.addEventListener('mouseup', () => { planeMouseDown = false; handMouseDown = false; }); // Resize function resize() { const width = window.innerWidth / 2; const height = window.innerHeight; planeRenderer.setSize(width, height); planeCamera.aspect = width / height; planeCamera.updateProjectionMatrix(); handRenderer.setSize(width, height); handCamera.aspect = width / height; handCamera.updateProjectionMatrix(); } window.addEventListener('resize', resize); resize(); // Animation loop function animate() { requestAnimationFrame(animate); planeRenderer.render(planeScene, planeCamera); handRenderer.render(handScene, handCamera); } animate(); </script> </body> </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Right Hand Rule - Physics Visualization</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+        .canvas-container {
+            flex: 1;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 11px;
+            color: #00ff00;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #00ff00;
+            z-index: 10;
+        }
+        .bottom-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 11px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #00ff00;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .vector-controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            font-size: 11px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #00ff00;
+            width: 200px;
+        }
+        button {
+            background: #003300;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px 10px;
+            margin: 2px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+        }
+        button:hover {
+            background: #005500;
+        }
+        h3 {
+            margin: 0 0 10px 0;
+            font-size: 13px;
+        }
+        input[type="number"], input[type="range"] {
+            background: #001100;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            border-radius: 3px;
+        }
+        input[type="number"] {
+            width: 50px;
+        }
+        input[type="range"] {
+            width: 100px;
+        }
+        label {
+            font-size: 10px;
+            margin-right: 5px;
+        }
+        .input-group {
+            margin: 5px 0;
+        }
+        .finger-control {
+            margin: 8px 0;
+            padding: 5px;
+            border: 1px solid #003300;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="canvas-container">
+            <div class="controls">
+                <h3>XYZ COORDINATE PLANE</h3>
+                Drag to rotate<br>
+                Scroll to zoom
+            </div>
+            <div class="vector-controls">
+                <h3>VECTORS</h3>
+                <div class="input-group">
+                    <label>i:</label><input type="number" id="vec-i" value="5" step="1">
+                    <label>j:</label><input type="number" id="vec-j" value="5" step="1">
+                </div>
+                <div class="input-group">
+                    <label>k:</label><input type="number" id="vec-k" value="5" step="1">
+                </div>
+                <button onclick="addVector()">Add Vector</button>
+                <button onclick="clearVectors()">Clear All</button>
+                <button onclick="resetPlaneView()">Reset View</button>
+            </div>
+            <canvas id="plane-canvas"></canvas>
+        </div>
+        <div class="canvas-container">
+            <div class="controls">
+                <h3>3D HAND MODEL</h3>
+                Drag to rotate<br>
+                Scroll to zoom
+            </div>
+            <div class="bottom-controls">
+                <h3>ROTATION MODE</h3>
+                <button id="camera-mode" onclick="toggleRotationMode()" style="background: #005500;">Camera (Active)</button><br>
+                <h3>QUICK POSES</h3>
+                <button onclick="setPose('open')">Open Hand</button>
+                <button onclick="setPose('fist')">Fist</button><br>
+                <button onclick="setPose('point')">Point</button>
+                <button onclick="setPose('peace')">Peace</button><br>
+                <button onclick="setPose('thumbsup')">Thumbs Up</button>
+                <button onclick="setPose('ok')">OK Sign</button><br>
+                <h3>INDIVIDUAL FINGERS</h3>
+                <div class="finger-control">
+                    <label>Thumb:</label><br>
+                    <input type="range" id="thumb-slider" min="0" max="100" value="0" oninput="setFingerCurl(0, this.value)">
+                    <span id="thumb-val">0%</span>
+                </div>
+                <div class="finger-control">
+                    <label>Index:</label><br>
+                    <input type="range" id="index-slider" min="0" max="100" value="0" oninput="setFingerCurl(1, this.value)">
+                    <span id="index-val">0%</span>
+                </div>
+                <div class="finger-control">
+                    <label>Middle:</label><br>
+                    <input type="range" id="middle-slider" min="0" max="100" value="0" oninput="setFingerCurl(2, this.value)">
+                    <span id="middle-val">0%</span>
+                </div>
+                <div class="finger-control">
+                    <label>Ring:</label><br>
+                    <input type="range" id="ring-slider" min="0" max="100" value="0" oninput="setFingerCurl(3, this.value)">
+                    <span id="ring-val">0%</span>
+                </div>
+                <div class="finger-control">
+                    <label>Pinky:</label><br>
+                    <input type="range" id="pinky-slider" min="0" max="100" value="0" oninput="setFingerCurl(4, this.value)">
+                    <span id="pinky-val">0%</span>
+                </div>
+                <button onclick="resetHandView()">Reset View</button>
+            </div>
+            <canvas id="hand-canvas"></canvas>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Wait for Three.js to load
+        window.addEventListener('load', function() {
+            console.log('Three.js loaded:', typeof THREE !== 'undefined');
+            
+            // PLANE SCENE
+            const planeCanvas = document.getElementById('plane-canvas');
+            const planeScene = new THREE.Scene();
+            planeScene.background = new THREE.Color(0x0a0a0a);
+            const planeCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+            const planeRenderer = new THREE.WebGLRenderer({canvas: planeCanvas, antialias: true});
+            
+            planeCamera.position.set(15, 15, 15);
+            planeCamera.lookAt(0, 0, 0);
+
+            // Axes
+            const axisLength = 15;
+            const xAxis = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-axisLength, 0, 0),
+                new THREE.Vector3(axisLength, 0, 0)
+            ]);
+            const xLine = new THREE.Line(xAxis, new THREE.LineBasicMaterial({color: 0xff0000}));
+            planeScene.add(xLine);
+
+            const yAxis = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, -axisLength, 0),
+                new THREE.Vector3(0, axisLength, 0)
+            ]);
+            const yLine = new THREE.Line(yAxis, new THREE.LineBasicMaterial({color: 0x00ff00}));
+            planeScene.add(yLine);
+
+            const zAxis = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, -axisLength),
+                new THREE.Vector3(0, 0, axisLength)
+            ]);
+            const zLine = new THREE.Line(zAxis, new THREE.LineBasicMaterial({color: 0x0000ff}));
+            planeScene.add(zLine);
+
+            // Grid
+            const gridHelper = new THREE.GridHelper(30, 30, 0x004400, 0x002200);
+            planeScene.add(gridHelper);
+
+            // Origin marker
+            const originGeom = new THREE.SphereGeometry(0.3, 16, 16);
+            const originMat = new THREE.MeshBasicMaterial({color: 0xffff00});
+            const originMesh = new THREE.Mesh(originGeom, originMat);
+            planeScene.add(originMesh);
+
+            // Vector group
+            const vectorGroup = new THREE.Group();
+            planeScene.add(vectorGroup);
+            let vectors = [];
+
+            window.addVector = function() {
+                const i = parseFloat(document.getElementById('vec-i').value);
+                const j = parseFloat(document.getElementById('vec-j').value);
+                const k = parseFloat(document.getElementById('vec-k').value);
+                
+                const dir = new THREE.Vector3(i, j, k);
+                const length = dir.length();
+                const arrowHelper = new THREE.ArrowHelper(
+                    dir.normalize(),
+                    new THREE.Vector3(0, 0, 0),
+                    length,
+                    0xff00ff,
+                    length * 0.2,
+                    length * 0.1
+                );
+                vectorGroup.add(arrowHelper);
+                vectors.push(arrowHelper);
+            }
+
+            window.clearVectors = function() {
+                while(vectorGroup.children.length > 0) {
+                    vectorGroup.remove(vectorGroup.children[0]);
+                }
+                vectors = [];
+            }
+
+            window.resetPlaneView = function() {
+                planeCamera.position.set(15, 15, 15);
+                planeCamera.lookAt(0, 0, 0);
+            }
+
+            // HAND SCENE
+            const handCanvas = document.getElementById('hand-canvas');
+            const handScene = new THREE.Scene();
+            handScene.background = new THREE.Color(0x0a0a0a);
+            const handCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+            const handRenderer = new THREE.WebGLRenderer({canvas: handCanvas, antialias: true});
+            
+            handCamera.position.set(0, 0, 30);
+            handCamera.lookAt(0, 0, 0);
+
+            const handLight = new THREE.DirectionalLight(0xffffff, 1);
+            handLight.position.set(10, 10, 10);
+            handScene.add(handLight);
+            handScene.add(new THREE.AmbientLight(0x505050));
+
+            const handMaterial = new THREE.MeshPhongMaterial({
+                color: 0x00ff88,
+                shininess: 30
+            });
+
+            let handGroup = new THREE.Group();
+            handScene.add(handGroup);
+
+            // Finger curl states
+            let fingerCurls = [0, 0, 0, 0, 0];
+            let fingerObjects = {
+                thumb: [],
+                index: [],
+                middle: [],
+                ring: [],
+                pinky: []
+            };
+
+            function createPentagonPalm() {
+                const shape = new THREE.Shape();
+                const radius = 4;
+                const angles = [
+                    Math.PI / 2,
+                    Math.PI / 2 + 2 * Math.PI / 5,
+                    Math.PI / 2 + 4 * Math.PI / 5,
+                    Math.PI / 2 + 6 * Math.PI / 5,
+                    Math.PI / 2 + 8 * Math.PI / 5
+                ];
+                
+                shape.moveTo(radius * Math.cos(angles[0]), radius * Math.sin(angles[0]));
+                for (let i = 1; i < 5; i++) {
+                    shape.lineTo(radius * Math.cos(angles[i]), radius * Math.sin(angles[i]));
+                }
+                shape.lineTo(radius * Math.cos(angles[0]), radius * Math.sin(angles[0]));
+
+                const extrudeSettings = {
+                    depth: 2,
+                    bevelEnabled: true,
+                    bevelThickness: 0.2,
+                    bevelSize: 0.2,
+                    bevelSegments: 3
+                };
+                
+                const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                const palm = new THREE.Mesh(geometry, handMaterial);
+                palm.rotation.x = Math.PI / 2;
+                palm.position.y = -2;
+                return palm;
+            }
+
+            function createFingerSegment(width, height, depth) {
+                const geometry = new THREE.BoxGeometry(width, height, depth);
+                return new THREE.Mesh(geometry, handMaterial);
+            }
+
+            function createHand() {
+                while(handGroup.children.length > 0) {
+                    handGroup.remove(handGroup.children[0]);
+                }
+                fingerObjects = {
+                    thumb: [],
+                    index: [],
+                    middle: [],
+                    ring: [],
+                    pinky: []
+                };
+
+                const palm = createPentagonPalm();
+                handGroup.add(palm);
+
+                const fingers = [
+                    { name: 'thumb', x: -5, baseY: -1, length: 3.5, width: 1.2, isThumb: true },
+                    { name: 'index', x: -2.5, baseY: 2, length: 3.5, width: 0.9, isThumb: false },
+                    { name: 'middle', x: -0.5, baseY: 3, length: 4, width: 0.9, isThumb: false },
+                    { name: 'ring', x: 1.5, baseY: 2.5, length: 3.5, width: 0.9, isThumb: false },
+                    { name: 'pinky', x: 3.5, baseY: 1.5, length: 2.8, width: 0.8, isThumb: false }
+                ];
+
+                fingers.forEach((finger, idx) => {
+                    const curl = fingerCurls[idx] / 100;
+                    const seg1Len = finger.length * 0.35;
+                    const seg2Len = finger.length * 0.35;
+                    const seg3Len = finger.length * 0.30;
+
+                    if (finger.isThumb) {
+                        const baseAngle = curl * Math.PI / 6;
+                        const midAngle = curl * Math.PI / 8;
+                        const tipAngle = curl * Math.PI / 8;
+
+                        const seg1 = createFingerSegment(finger.width, seg1Len, finger.width);
+                        seg1.position.set(finger.x, finger.baseY, seg1Len / 2);
+                        seg1.rotation.y = Math.PI / 2;
+                        seg1.rotation.x = -baseAngle;
+                        seg1.position.z += seg1Len / 2 * (1 - Math.cos(baseAngle));
+                        seg1.position.y -= seg1Len / 2 * Math.sin(baseAngle);
+                        handGroup.add(seg1);
+                        fingerObjects.thumb.push(seg1);
+
+                        const seg1EndY = seg1.position.y - seg1Len / 2 * Math.sin(baseAngle);
+                        const seg1EndZ = seg1.position.z + seg1Len / 2 * Math.cos(baseAngle);
+
+                        const seg2 = createFingerSegment(finger.width * 0.95, seg2Len, finger.width * 0.95);
+                        seg2.rotation.y = Math.PI / 2;
+                        seg2.rotation.x = -baseAngle - midAngle;
+                        seg2.position.x = finger.x;
+                        seg2.position.y = seg1EndY - seg2Len / 2 * Math.sin(baseAngle + midAngle);
+                        seg2.position.z = seg1EndZ + seg2Len / 2 * Math.cos(baseAngle + midAngle);
+                        handGroup.add(seg2);
+                        fingerObjects.thumb.push(seg2);
+
+                        const seg2EndY = seg2.position.y - seg2Len / 2 * Math.sin(baseAngle + midAngle);
+                        const seg2EndZ = seg2.position.z + seg2Len / 2 * Math.cos(baseAngle + midAngle);
+
+                        const seg3 = createFingerSegment(finger.width * 0.9, seg3Len, finger.width * 0.9);
+                        seg3.rotation.y = Math.PI / 2;
+                        seg3.rotation.x = -baseAngle - midAngle - tipAngle;
+                        seg3.position.x = finger.x;
+                        seg3.position.y = seg2EndY - seg3Len / 2 * Math.sin(baseAngle + midAngle + tipAngle);
+                        seg3.position.z = seg2EndZ + seg3Len / 2 * Math.cos(baseAngle + midAngle + tipAngle);
+                        handGroup.add(seg3);
+                        fingerObjects.thumb.push(seg3);
+                    } else {
+                        const baseAngle = curl * Math.PI / 3.5;
+                        const midAngle = curl * Math.PI / 2.8;
+                        const tipAngle = curl * Math.PI / 3;
+
+                        const seg1 = createFingerSegment(finger.width, seg1Len, finger.width);
+                        seg1.position.set(finger.x, finger.baseY + seg1Len / 2 * Math.cos(baseAngle), seg1Len / 2 * Math.sin(baseAngle));
+                        seg1.rotation.x = baseAngle;
+                        handGroup.add(seg1);
+                        fingerObjects[finger.name].push(seg1);
+
+                        const seg1EndY = seg1.position.y + seg1Len / 2 * Math.cos(baseAngle);
+                        const seg1EndZ = seg1.position.z + seg1Len / 2 * Math.sin(baseAngle);
+
+                        const seg2 = createFingerSegment(finger.width * 0.95, seg2Len, finger.width * 0.95);
+                        seg2.rotation.x = baseAngle + midAngle;
+                        seg2.position.x = finger.x;
+                        seg2.position.y = seg1EndY + seg2Len / 2 * Math.cos(baseAngle + midAngle);
+                        seg2.position.z = seg1EndZ + seg2Len / 2 * Math.sin(baseAngle + midAngle);
+                        handGroup.add(seg2);
+                        fingerObjects[finger.name].push(seg2);
+
+                        const seg2EndY = seg2.position.y + seg2Len / 2 * Math.cos(baseAngle + midAngle);
+                        const seg2EndZ = seg2.position.z + seg2Len / 2 * Math.sin(baseAngle + midAngle);
+
+                        const seg3 = createFingerSegment(finger.width * 0.9, seg3Len, finger.width * 0.9);
+                        seg3.rotation.x = baseAngle + midAngle + tipAngle;
+                        seg3.position.x = finger.x;
+                        seg3.position.y = seg2EndY + seg3Len / 2 * Math.cos(baseAngle + midAngle + tipAngle);
+                        seg3.position.z = seg2EndZ + seg3Len / 2 * Math.sin(baseAngle + midAngle + tipAngle);
+                        handGroup.add(seg3);
+                        fingerObjects[finger.name].push(seg3);
+                    }
+                });
+            }
+
+            window.setFingerCurl = function(fingerIndex, value) {
+                fingerCurls[fingerIndex] = parseFloat(value);
+                const names = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+                document.getElementById(names[fingerIndex] + '-val').textContent = Math.round(value) + '%';
+                createHand();
+            }
+
+            window.setPose = function(pose) {
+                const sliders = ['thumb-slider', 'index-slider', 'middle-slider', 'ring-slider', 'pinky-slider'];
+                switch(pose) {
+                    case 'open':
+                        fingerCurls = [0, 0, 0, 0, 0];
+                        break;
+                    case 'fist':
+                        fingerCurls = [80, 100, 100, 100, 100];
+                        break;
+                    case 'point':
+                        fingerCurls = [50, 0, 100, 100, 100];
+                        break;
+                    case 'peace':
+                        fingerCurls = [100, 0, 0, 100, 100];
+                        break;
+                    case 'thumbsup':
+                        fingerCurls = [0, 100, 100, 100, 100];
+                        break;
+                    case 'ok':
+                        fingerCurls = [70, 70, 0, 0, 0];
+                        break;
+                }
+                sliders.forEach((id, idx) => {
+                    document.getElementById(id).value = fingerCurls[idx];
+                    const names = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+                    document.getElementById(names[idx] + '-val').textContent = Math.round(fingerCurls[idx]) + '%';
+                });
+                createHand();
+            }
+
+            window.resetHandView = function() {
+                handCamera.position.set(0, 0, 30);
+                handCamera.lookAt(0, 0, 0);
+                handGroup.rotation.set(0, 0, 0);
+            }
+
+            createHand();
+
+            // Mouse controls for plane
+            let planeMouseDown = false;
+            let planeMouseX = 0, planeMouseY = 0;
+
+            planeCanvas.addEventListener('mousedown', (e) => {
+                planeMouseDown = true;
+                planeMouseX = e.clientX;
+                planeMouseY = e.clientY;
+            });
+
+            planeCanvas.addEventListener('mousemove', (e) => {
+                if (planeMouseDown) {
+                    const dx = e.clientX - planeMouseX;
+                    const dy = e.clientY - planeMouseY;
+                    
+                    const axis = new THREE.Vector3(dy, dx, 0).normalize();
+                    const angle = Math.sqrt(dx * dx + dy * dy) * 0.01;
+                    planeCamera.position.applyAxisAngle(axis, angle);
+                    planeCamera.lookAt(0, 0, 0);
+                    
+                    planeMouseX = e.clientX;
+                    planeMouseY = e.clientY;
+                }
+            });
+
+            planeCanvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const delta = e.deltaY * 0.01;
+                const dir = planeCamera.position.clone().normalize();
+                planeCamera.position.addScaledVector(dir, delta);
+            });
+
+            // Mouse controls for hand
+            let handMouseDown = false;
+            let handMouseX = 0, handMouseY = 0;
+            let handRotationMode = 'camera';
+
+            window.toggleRotationMode = function() {
+                handRotationMode = handRotationMode === 'camera' ? 'hand' : 'camera';
+                const btn = document.getElementById('camera-mode');
+                if (handRotationMode === 'camera') {
+                    btn.textContent = 'Camera (Active)';
+                    btn.style.background = '#005500';
+                } else {
+                    btn.textContent = 'Hand (Active)';
+                    btn.style.background = '#005500';
+                }
+            }
+
+            handCanvas.addEventListener('mousedown', (e) => {
+                handMouseDown = true;
+                handMouseX = e.clientX;
+                handMouseY = e.clientY;
+            });
+
+            handCanvas.addEventListener('mousemove', (e) => {
+                if (handMouseDown) {
+                    const dx = e.clientX - handMouseX;
+                    const dy = e.clientY - handMouseY;
+                    
+                    if (handRotationMode === 'camera') {
+                        const axis = new THREE.Vector3(dy, dx, 0).normalize();
+                        const angle = Math.sqrt(dx * dx + dy * dy) * 0.01;
+                        handCamera.position.applyAxisAngle(axis, angle);
+                        handCamera.lookAt(0, 0, 0);
+                    } else {
+                        handGroup.rotation.y += dx * 0.01;
+                        handGroup.rotation.x += dy * 0.01;
+                    }
+                    
+                    handMouseX = e.clientX;
+                    handMouseY = e.clientY;
+                }
+            });
+
+            handCanvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const delta = e.deltaY * 0.01;
+                handCamera.position.z += delta;
+            });
+
+            document.addEventListener('mouseup', () => {
+                planeMouseDown = false;
+                handMouseDown = false;
+            });
+
+            // Resize
+            function resize() {
+                const width = window.innerWidth / 2;
+                const height = window.innerHeight;
+                
+                planeRenderer.setSize(width, height);
+                planeCamera.aspect = width / height;
+                planeCamera.updateProjectionMatrix();
+                
+                handRenderer.setSize(width, height);
+                handCamera.aspect = width / height;
+                handCamera.updateProjectionMatrix();
+            }
+
+            window.addEventListener('resize', resize);
+            resize();
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                planeRenderer.render(planeScene, planeCamera);
+                handRenderer.render(handScene, handCamera);
+            }
+            animate();
+            
+            console.log('Visualization initialized successfully');
+        });
+    </script>
+</body>
+</html>
